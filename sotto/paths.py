@@ -1,13 +1,19 @@
-"""Где Sotto хранит файлы (по XDG)."""
+"""Где Sotto хранит файлы (по XDG; на Windows — %APPDATA% и %LOCALAPPDATA%)."""
 
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 
 def _xdg(var: str, default: str) -> Path:
-    return Path(os.environ.get(var) or Path.home() / default)
+    if os.environ.get(var):
+        return Path(os.environ[var])
+    if sys.platform == "win32":
+        appdata = "APPDATA" if var == "XDG_CONFIG_HOME" else "LOCALAPPDATA"
+        return Path(os.environ.get(appdata) or Path.home() / "AppData/Roaming")
+    return Path.home() / default
 
 
 CONFIG_DIR = _xdg("XDG_CONFIG_HOME", ".config") / "sotto"
