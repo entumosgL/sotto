@@ -76,7 +76,12 @@
       mkShell = cuda:
         let py = mkPython cuda; in
         pkgs.mkShell {
-          packages = [ (py.withPackages (ps: pythonDeps ps ++ [ ps.pytest ps.pytest-asyncio ])) ] ++ runtimeTools;
+          # Разработка: тесты, линтер, типы и git-хуки (pre-commit: ruff, mypy, секреты; pre-push: все тесты).
+          packages = [
+            (py.withPackages (ps: pythonDeps ps ++ [ ps.pytest ps.pytest-asyncio ps.mypy ps.pre-commit-hooks ]))
+            pkgs.ruff
+            pkgs.pre-commit
+          ] ++ runtimeTools;
           env = browserEnv;
           shellHook = ''export PYTHONPATH=$PWD:$PYTHONPATH'';
         };

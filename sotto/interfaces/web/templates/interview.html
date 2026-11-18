@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ iv.company }} — Sotto{% endblock %}
+{% block content %}
+<div class="crumbs"><a href="/interviews">Собеседования</a> / {{ iv.company }}</div>
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ iv.company }}{% if iv.stage %} <span class="muted" style="font-weight:500">· {{ iv.stage }}</span>{% endif %}</h1>
+    <div class="meta">
+      <span class="badge {{ 'ok' if iv.status in ('passed', 'offer') else ('bad' if iv.status == 'rejected' else ('accent' if iv.status == 'planned' else '')) }}">{{ statuses.get(iv.status, iv.status) }}</span>
+      {% if iv.role %}<span>{{ iv.role }}</span>{% endif %}
+      <span>{{ iv.scheduled_at|soon if iv.scheduled_at else "дата не назначена" }}</span>
+    </div>
+  </div>
+  <div class="actions">
+    {% if iv.link %}<a class="btn btn-secondary" href="{{ iv.link }}" target="_blank" rel="noopener">Ссылка на звонок</a>{% endif %}
+    <form method="post" action="/interviews/{{ iv.id }}/train" class="row">
+      <select name="lang" style="width:auto"><option value="en">на английском</option><option value="ru">на русском</option></select>
+      <button>Потренироваться</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-head"><h3>Подготовка</h3><span class="spacer"></span>
+      {% if iv.vacancy %}<form method="post" action="/interviews/{{ iv.id }}/brief"><button class="btn-ghost btn-sm">Составить заново</button></form>{% endif %}</div>
+    {% if iv.brief %}<div class="prose">{{ iv.brief|md|safe }}</div>
+    {% elif iv.vacancy %}<p class="muted">Бриф готовит агент…</p>
+    {% else %}<p class="muted">Добавь текст вакансии в «Изменить» ниже: агент составит бриф, а суфлёр получит его на звонке.</p>{% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Легенда для этой компании</h3></div>
+    {% if legend %}
+    <ul>{% for l in legend %}<li>{{ l.claim }}{% if l.note %} <span class="muted">({{ l.note }})</span>{% endif %}</li>{% endfor %}</ul>
+    <p class="faint small">Это ты им уже рассказал. Перед следующим этапом перечитай. Удалится само, когда процесс закроется.</p>
+    {% else %}<p class="muted">Пока ничего не придумано.</p>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3>Чем закончилось</h3></div>
+  <div class="row">
+    <form method="post" action="/interviews/{{ iv.id }}/status"><input type="hidden" name="status" value="done"><button class="btn-secondary btn-sm">Прошло, жду ответа</button></form>
+    <form method="post" action="/interviews/{{ iv.id }}/next"><button class="btn-secondary btn-sm">Позвали дальше: новый этап</button></form>
+    <form method="post" action="/interviews/{{ iv.id }}/status"><input type="hidden" name="status" value="offer"><button class="btn-secondary btn-sm">Оффер</button></form>
+    <form method="post" action="/interviews/{{ iv.id }}/status"><input type="hidden" name="status" value="declined"><button class="btn-ghost btn-sm">Я отказался</button></form>
+    <form method="post" action="/interviews/{{ iv.id }}/status"><input type="hidden" name="status" value="cancelled"><button class="btn-ghost btn-sm">Отменено</button></form>
+  </div>
+  <details class="fold" {% if iv.status == 'rejected' %}open{% endif %}>
+    <summary>Отказали</summary>
+    <form method="post" action="/interviews/{{ iv.id }}/status">
+      <input type="hidden" name="status" value="rejected">
+      <div class="field"><label>Текст письма или что сказали (можно оставить пустым): агент разберёт причины по звонкам и подсказкам</label>
+        <textarea name="outcome" style="min-height:72px">{{ iv.outcome or '' }}</textarea></div>
+      <button class="btn-danger-solid">Отметить отказ и разобрать</button>
+    </form>
+  </details>
+</div>
+
+{% if iv.analysis or iv.status == 'rejected' %}
+<div class="card">
+  <div class="card-head"><h3>Разбор отказа</h3><span class="spacer"></span>
+    <form method="post" action="/interviews/{{ iv.id }}/analyze"><button class="btn-ghost btn-sm">Разобрать заново</button></form></div>
+  <div class="prose">{{ (iv.analysis or "Ещё не разобран.")|md|safe }}</div>
+</div>
+{% endif %}
+
+{% if calls or others %}
+<div class="grid-2">
+  <div class="card">
+    <div class="card-head"><h3>Звонки с компанией</h3></div>
+    {% if calls %}<div class="list">{% for c in calls %}
+      <div class="list-item"><div class="main-col"><a class="title" href="/calls/{{ c.id }}">{{ c.title or "Звонок #" ~ c.id }}</a><div class="sub">{{ c.started_at|dt }}</div></div></div>
+    {% endfor %}</div>{% else %}<p class="muted">Звонков не было.</p>{% endif %}
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Другие этапы</h3></div>
+    {% if others %}<div class="list">{% for o in others %}
+      <div class="list-item"><div class="main-col"><a class="title" href="/interviews/{{ o.id }}">{{ o.stage or "этап" }}</a><div class="sub">{{ o.scheduled_at|dt }}</div></div>
+        <div class="aside"><span class="badge">{{ statuses.get(o.status, o.status) }}</span></div></div>
+    {% endfor %}</div>{% else %}<p class="muted">Это первый этап.</p>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+<details class="card">
+  <summary>Изменить</summary>
+  <form method="post" action="/interviews/{{ iv.id }}">
+    <div class="form-grid">
+      <div class="field"><label>Компания</label><input type="text" name="company" required value="{{ iv.company }}"></div>
+      <div class="field"><label>Роль</label><input type="text" name="role" value="{{ iv.role or '' }}"></div>
+      <div class="field"><label>Этап</label><input type="text" name="stage" value="{{ iv.stage or '' }}"></div>
+      <div class="field"><label>Когда</label><input type="datetime-local" name="when" value="{{ when }}"></div>
+      <div class="field"><label>Длительность, мин</label><input type="number" name="duration_min" value="{{ iv.duration_min or 60 }}"></div>
+      <div class="field"><label>Ссылка на звонок</label><input type="text" name="link" value="{{ iv.link or '' }}"></div>
+    </div>
+    <div class="field"><label>Вакансия</label><textarea name="vacancy">{{ iv.vacancy or '' }}</textarea></div>
+    <div class="field"><label>Бриф для суфлёра</label><textarea name="brief">{{ iv.brief or '' }}</textarea></div>
+    <div class="field"><label>Заметки</label><textarea name="notes" style="min-height:60px">{{ iv.notes or '' }}</textarea></div>
+    <div class="form-actions"><button>Сохранить</button></div>
+  </form>
+  <hr>
+  <form method="post" action="/interviews/{{ iv.id }}/delete"><button class="btn-danger btn-sm">Удалить собеседование</button></form>
+</details>
+{% endblock %}

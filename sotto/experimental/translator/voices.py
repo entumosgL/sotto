@@ -20,8 +20,7 @@ import httpx
 import numpy as np
 
 from ... import paths
-from ...audio import tts
-from ...audio.capture import SAMPLE_RATE
+from ...infrastructure.audio import SAMPLE_RATE, tts
 
 log = logging.getLogger(__name__)
 

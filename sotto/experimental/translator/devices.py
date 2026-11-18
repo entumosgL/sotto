@@ -40,7 +40,7 @@ class VirtualDevices:
         self.original_volume = original_volume
         self._procs: list[subprocess.Popen] = []
 
-    def __enter__(self) -> "VirtualDevices":
+    def __enter__(self) -> VirtualDevices:
         self._procs.append(subprocess.Popen(
             ["pw-loopback", "-n", "sotto-call",
              f"--capture-props=media.class=Audio/Sink node.name={CALL_SINK} "

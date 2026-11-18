@@ -22,8 +22,37 @@ sotto = "sotto.cli:main"
 include = ["sotto*"]
 
 [tool.setuptools.package-data]
-sotto = ["web/templates/*.html", "web/static/*", "prompts/*.md", "sim/scenarios/*.toml", "experimental/translator/README.md"]
+sotto = ["interfaces/web/templates/*.html", "interfaces/web/static/*", "prompts/*.md", "interfaces/cli/sim/scenarios/*.toml", "experimental/translator/README.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["sotto/experimental"]
+
+[tool.ruff.lint]
+# pyflakes, pycodestyle, сортировка импортов, современный синтаксис, частые ошибки
+select = ["F", "E", "W", "I", "UP", "B"]
+ignore = [
+  "E501",    # длину строк держит форматирование кода, а не линтер (русские комментарии длинные)
+  "B008",    # FastAPI: Form(...) в аргументах — так задумано
+  "UP042",   # StrEnum уже используется где нужно
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["sotto.domain", "sotto.application"]
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_ignores = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "sotto.domain.*"
+disallow_untyped_defs = true

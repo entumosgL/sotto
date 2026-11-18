@@ -1,0 +1,140 @@
+{%- set ICONS = {
+  "home": '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  "calendar": '<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M8 3v3M16 3v3M3 9.5h18"/>',
+  "chat": '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-4.6A8 8 0 1 1 21 12z"/>',
+  "target": '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>',
+  "phone": '<path d="M5 3.5h3.5l1.8 4.6-2.3 1.5a11 11 0 0 0 6.4 6.4l1.5-2.3 4.6 1.8V19a1.5 1.5 0 0 1-1.5 1.5A16.5 16.5 0 0 1 3.5 5 1.5 1.5 0 0 1 5 3.5z"/>',
+  "book": '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H20v-3"/>',
+  "film": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>',
+  "briefcase": '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 12.5h18"/>',
+  "file": '<path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  "user": '<circle cx="12" cy="8" r="4"/><path d="M4 20.5a8 8 0 0 1 16 0"/>',
+  "sliders": '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  "terminal": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M12.5 15H17"/>',
+} -%}
+{%- macro icon(name) -%}<svg viewBox="0 0 24 24" aria-hidden="true">{{ ICONS[name]|safe }}</svg>{%- endmacro -%}
+{%- set NAV = [
+  (None, [("/", "Главная", "home")]),
+  ("Подготовка", [("/interviews", "Собеседования", "calendar"), ("/chat", "Тренировка текстом", "chat"), ("/trainer", "Голосовой тренер", "target")]),
+  ("История", [("/calls", "Звонки", "phone"), ("/legend", "Легенда", "book"), ("/recordings", "Записи экрана", "film")]),
+  ("Поиск работы", [("/jobs", "Вакансии", "briefcase"), ("/resume", "Резюме и письма", "file")]),
+  ("Настройка", [("/profile", "Профиль", "user"), ("/prompts", "Промпты", "terminal"), ("/settings", "Настройки", "sliders")]),
+] -%}
+{%- macro nav_links() -%}
+<nav class="nav">
+  {%- for group, links in NAV %}
+  {%- if group %}<div class="nav-group">{{ group }}</div>{% endif %}
+  {%- for href, title, ic in links %}
+  <a href="{{ href }}" class="{{ 'active' if (path == href or (href != '/' and path.startswith(href ~ '/'))) else '' }}">{{ icon(ic) }}<span>{{ title }}</span></a>
+  {%- endfor %}
+  {%- endfor %}
+</nav>
+{%- endmacro -%}
+{%- macro status_box() -%}
+<div class="status-box">
+  <div class="status-line"><span class="dot {{ 'on' if status.voice else '' }}" data-st="voice-dot"></span><b data-st="voice">{{ "Суфлёр включён" if status.voice else "Суфлёр выключен" }}</b></div>
+  <div class="status-line"><span class="dot {{ 'live' if status.in_call else '' }}" data-st="call-dot"></span><span data-st="call">{{ "Идёт звонок" if status.in_call else "Звонка нет" }}</span></div>
+  <div class="status-line small" data-st="mode">{{ "Подсказки сами" if status.mode == "auto" else "Подсказки по хоткею" }}{{ " · запись экрана" if status.recording else "" }}</div>
+  <button type="button" class="btn btn-sm {{ 'btn-secondary' if status.voice else '' }}" data-voice="{{ 'true' if status.voice else 'false' }}"
+          onclick="sottoCtl('{{ 'voice_stop' if status.voice else 'voice_start' }}')">{{ "Остановить суфлёр" if status.voice else "Запустить суфлёр" }}</button>
+</div>
+{%- endmacro -%}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Sotto{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-mark">S</span>Sotto</a>
+    {{ nav_links() }}
+    {{ status_box() }}
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <details>
+        <summary>
+          <div class="topbar-row">
+            <a class="brand" href="/"><span class="brand-mark">S</span>Sotto</a>
+            <span class="badge status-chip {{ 'ok' if status.voice else '' }}" data-st="chip">{{ "звонок" if status.in_call else ("суфлёр включён" if status.voice else "суфлёр выключен") }}</span>
+            <span class="menu-btn" aria-label="Меню"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+          </div>
+        </summary>
+        <div class="menu">{{ nav_links() }}{{ status_box() }}</div>
+      </details>
+    </header>
+
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+  // Живые события демона. Подписка: sottoEvents(url, handler). Подключение общее для всех вкладок.
+  const sottoEvents = (() => {
+    const handlers = {}, direct = {};
+    let port = null;
+    const deliver = (url, data) => (handlers[url] || []).forEach((f) => f(JSON.parse(data)));
+    const open = (url) => {
+      if (port) return port.postMessage({op: "sub", url});
+      if (direct[url]) return;
+      direct[url] = new EventSource(url);
+      direct[url].onmessage = (m) => deliver(url, m.data);
+    };
+    const closeAll = () => {
+      for (const url in handlers) {
+        if (port) port.postMessage({op: "unsub", url});
+        else if (direct[url]) { direct[url].close(); delete direct[url]; }
+      }
+    };
+    try {
+      const w = new SharedWorker("/static/events-worker.js");
+      port = w.port;
+      port.onmessage = (m) => deliver(m.data.url, m.data.data);
+      port.start();
+      w.onerror = () => { port = null; for (const url in handlers) open(url); };
+    } catch (e) { port = null; }
+    addEventListener("pagehide", closeAll);
+    addEventListener("pageshow", (e) => { if (e.persisted) for (const url in handlers) open(url); });
+    document.addEventListener("visibilitychange", () => {  // без общего подключения: фоновые вкладки не держат своё
+      if (port) return;
+      if (document.hidden) closeAll(); else for (const url in handlers) open(url);
+    });
+    return (url, fn) => { if (!handlers[url]) { handlers[url] = []; open(url); } handlers[url].push(fn); };
+  })();
+
+  async function sottoCtl(action) {
+    await fetch("/api/ctl/" + action, {method: "POST"});
+    location.reload();
+  }
+
+  const toast = document.getElementById("toast");
+  function showToast(text) {
+    toast.textContent = text;
+    toast.classList.add("show");
+    clearTimeout(showToast.t);
+    showToast.t = setTimeout(() => toast.classList.remove("show"), 6000);
+  }
+  const st = (name) => document.querySelectorAll(`[data-st="${name}"]`);
+  sottoEvents("/api/events", (e) => {
+    if (e.type === "status") {
+      if ([...document.querySelectorAll("[data-voice]")].some((b) => b.dataset.voice !== String(e.voice))) return location.reload();
+      st("voice").forEach((el) => el.textContent = e.voice ? "Суфлёр включён" : "Суфлёр выключен");
+      st("voice-dot").forEach((el) => el.classList.toggle("on", e.voice));
+      st("call").forEach((el) => el.textContent = e.in_call ? "Идёт звонок" : "Звонка нет");
+      st("call-dot").forEach((el) => el.classList.toggle("live", e.in_call));
+      st("mode").forEach((el) => el.textContent = (e.mode === "auto" ? "Подсказки сами" : "Подсказки по хоткею") + (e.recording ? " · запись экрана" : ""));
+      st("chip").forEach((el) => { el.textContent = e.in_call ? "звонок" : (e.voice ? "суфлёр включён" : "суфлёр выключен"); el.classList.toggle("ok", e.voice); });
+    }
+    if (e.type === "notice" || e.type === "call.processed" || e.type === "job.done") showToast(e.text || e.title || "Готово");
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

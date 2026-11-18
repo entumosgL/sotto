@@ -4,13 +4,18 @@ import asyncio
 import time
 
 from sotto import config as config_mod
-from sotto.copilot.engine import Copilot
-from sotto.db import DB
-from sotto.events import EventBus
-from sotto.openrouter import Completion
+from sotto.application.copilot import Copilot
+from sotto.application.legend import LegendService
+from sotto.infrastructure.events import EventBus
+from sotto.infrastructure.llm.openrouter import Completion
+from sotto.infrastructure.prompts import prompts
+from sotto.infrastructure.sqlite.db import DB
+from sotto.infrastructure.sqlite.repositories import Repositories
 
 
 class FakeLLM:
+    configured = True
+
     def __init__(self, replies):
         self.replies = list(replies)
         self.calls = []
@@ -45,7 +50,10 @@ async def make(replies, mode="auto"):
     bus = EventBus()
     bus.bind(asyncio.get_running_loop())
     llm = FakeLLM(replies)
-    cp = Copilot(cfg, db, bus, llm, them_speaking=lambda: False, stage_name=lambda: None)
+    repos = Repositories(db)
+    legend = LegendService(repos.calls, repos.legend, repos.interviews)
+    cp = Copilot(cfg, repos.calls, legend, prompts, bus, llm, them_speaking=lambda: False, stage_name=lambda: None)
+    db.legend = legend  # тестам удобно: правила легенды — через сервис
     call = db.insert("calls", started_at=time.time())
     db.insert("utterances", call_id=call, channel="them", started_at=time.time(), ended_at=time.time(),
               text="Как обеспечить идемпотентность?")
@@ -62,24 +70,24 @@ async def test_auto_answer_saves_legend(isolated_dirs):
     done = [e for e in events if e["type"] == "answer.done"]
     assert done and done[0]["legend"] == ["В 2023 делал это в платежах"]
     call = db.one("SELECT id FROM calls")["id"]
-    assert db.active_legend(call)[0]["claim"] == "В 2023 делал это в платежах"
-    assert db.active_legend() == []          # в звонок без компании чужая легенда не идёт
+    assert db.legend.for_call(call)[0].claim == "В 2023 делал это в платежах"
+    assert db.legend.for_call(None) == []          # в звонок без компании чужая легенда не идёт
     assert db.one("SELECT kind FROM answers")["kind"] == "auto"
 
 
 async def test_legend_scoped_to_company(isolated_dirs):
     cp, db, bus, llm = await make(["Ответ [[вёл миграцию в Ozon]]"])
     call = db.one("SELECT id FROM calls")["id"]
-    db.set_call_company(call, "Acme")
+    db.legend.assign_company(call, "Acme")
     cp.on_utterance("them")
     await asyncio.sleep(0.3)
     same = db.insert("calls", started_at=time.time(), company="acme ")
     other = db.insert("calls", started_at=time.time(), company="Globex")
     training = db.insert("calls", started_at=time.time(), app="training", company="Acme")
-    assert [x["claim"] for x in db.active_legend(same)] == ["вёл миграцию в Ozon"]
-    assert db.active_legend(other) == [] and db.active_legend(training) == []
+    assert [x.claim for x in db.legend.for_call(same)] == ["вёл миграцию в Ozon"]
+    assert db.legend.for_call(other) == [] and db.legend.for_call(training) == []
     db.insert("interviews", company="Acme", status="rejected", created_at=time.time())
-    assert db.cleanup_legend() == 1 and db.active_legend(same) == []
+    assert db.legend.cleanup() == 1 and db.legend.for_call(same) == []
 
 
 async def test_auto_skip(isolated_dirs):
@@ -131,16 +139,16 @@ async def test_manual_answer_forbids_skip(isolated_dirs):
 
 
 def test_backchannel_and_whisper_tail():
-    from sotto.copilot.engine import is_backchannel
-    from sotto.copilot.listener import strip_hallucinations
+    from sotto.domain.hints import is_backchannel
+    from sotto.domain.speech import strip_hallucinations
     assert is_backchannel("Угу, понятно.") and is_backchannel("Okay, got it.")
     assert not is_backchannel("Хорошо. Как бы вы обеспечили идемпотентность?")
     assert strip_hallucinations("Что такое MVCC? Продолжение следует...") == "Что такое MVCC?"
 
 
 def test_unfilled_profile_template_is_empty():
-    from sotto.copilot.prompts import is_filled
-    from sotto.setup import PROFILE_TEMPLATE
+    from sotto.domain.profile import TEMPLATE as PROFILE_TEMPLATE
+    from sotto.domain.profile import is_filled
     assert not is_filled(PROFILE_TEMPLATE) and is_filled("Go, 5 лет, платежи")
 
 

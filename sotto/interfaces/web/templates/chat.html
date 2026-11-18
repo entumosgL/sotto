@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Тренировка текстом — Sotto{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>Тренировка текстом</h1>
+    <p class="lead">Проверка подсказок без звука и микрофона: тот же промпт, профиль и бриф, что на звонке. Легенда здесь не копится, каждая сессия начинается с чистого листа.</p>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-head"><h3>Спрашивает интервьюер</h3><span class="badge accent">рекомендуется</span></div>
+    <p class="muted small">ИИ-интервьюер ведёт собеседование по плану, в том числе по пробелам между резюме и вакансией. В поле ответа уже стоит подсказка: отправь её как есть или поправь.</p>
+    <form method="post" action="/chat/start">
+      <input type="hidden" name="mode" value="interviewer">
+      <div class="field"><label>Язык</label>
+        <select name="lang"><option value="en">английский</option><option value="ru">русский</option></select></div>
+      <div class="field"><label>Вакансия{% if from_interview %} ближайшего собеседования{% endif %}</label>
+        <textarea name="vacancy" placeholder="Вставь текст вакансии или укажи роль ниже">{{ vacancy }}</textarea></div>
+      <div class="field"><label>Роль, если вакансии нет</label>
+        <input type="text" name="role" placeholder="backend developer"></div>
+      <button>Начать</button>
+    </form>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Я спрашиваю сам</h3></div>
+    <p class="muted small">Пишешь вопросы за собеседника, суфлёр подсказывает ответ. Если ответ кандидата не написан, считается, что он сказал подсказку.</p>
+    <form method="post" action="/chat/start">
+      <input type="hidden" name="mode" value="self">
+      <div class="field"><label>Роль, на которую собеседуют</label>
+        <input type="text" name="role" placeholder="Middle Python developer"></div>
+      <button class="btn-secondary">Начать</button>
+    </form>
+  </div>
+</div>
+
+{% if sessions %}
+<div class="section-head"><h2>Открытые сессии</h2></div>
+<div class="card flush"><div class="list">
+  {% for s in sessions %}
+  <div class="list-item">
+    <div class="main-col"><a class="title" href="/chat/{{ s.id }}">{{ s.role }}</a><div class="sub">{{ "сам спрашиваю" if s.mode == "self" else "интервьюер" }}</div></div>
+    <div class="aside"><span class="badge {{ '' if s.ended else 'ok' }}">{{ "закончена" if s.ended else "идёт" }}</span></div>
+  </div>
+  {% endfor %}
+</div></div>
+{% endif %}
+
+{% if past %}
+<div class="section-head"><h2>Прошлые сессии</h2></div>
+<div class="card flush"><div class="list">
+  {% for c in past %}
+  <div class="list-item"><div class="main-col"><a class="title" href="/calls/{{ c.id }}">{{ c.title }}</a><div class="sub">{{ c.started_at|dt }}</div></div></div>
+  {% endfor %}
+</div></div>
+{% endif %}
+{% endblock %}

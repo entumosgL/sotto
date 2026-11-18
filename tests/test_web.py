@@ -5,14 +5,14 @@ import time
 from fastapi.testclient import TestClient
 
 from sotto import config as config_mod
-from sotto.daemon import Daemon
-from sotto.web.app import build_app
+from sotto.bootstrap import Sotto
+from sotto.interfaces.web.app import build_app
 
 
-def make_client():
+def make_client(**kw):
     cfg = config_mod.Config()
     cfg.recording.enabled = False
-    d = Daemon(cfg, with_overlay=False, with_hyprland=False)
+    d = Sotto(cfg, with_overlay=False, with_desktop=False, **kw)
     return d, TestClient(build_app(d), base_url=f"http://127.0.0.1:{cfg.web.port}")
 
 
@@ -38,7 +38,7 @@ def test_forms(isolated_dirs):
     c.post("/profile", data={"text": "# Иван\nGo-разработчик"})
     assert "Go-разработчик" in c.get("/profile").text
     c.post("/legend/add", data={"claim": "Вёл миграцию на Kafka", "note": ""})
-    assert d.db.active_legend()[0]["claim"] == "Вёл миграцию на Kafka"
+    assert d.legend.for_call(None)[0].claim == "Вёл миграцию на Kafka"
     c.post("/settings", data={"answer.mode": "auto", "openrouter.api_key": "",
                               "_checkboxes": "answer.allow_invention"})
     assert d.cfg.answer.mode == "auto" and d.cfg.answer.allow_invention is False
@@ -48,7 +48,7 @@ def test_forms(isolated_dirs):
 
 
 def test_letter_substitution(isolated_dirs):
-    from sotto.jobs.resume import letter_for
+    from sotto.domain.jobs import letter_for
     cluster = {"letter_md": "{greeting}! Хочу на позицию {position} в {company}."}
     assert letter_for({"title": "Go dev", "company": "Ozon"}, cluster) == "Здравствуйте! Хочу на позицию Go dev в Ozon."
     assert letter_for({"letter_override": "своё"}, cluster) == "своё"
@@ -77,5 +77,5 @@ def test_brief_from_trainer_reaches_next_call(isolated_dirs):
     r = c.post("/brief", data={"brief": "Middle Python в Acme"}, follow_redirects=False)
     assert r.status_code == 303
     assert d.db.get_meta("next_call_brief") == "Middle Python в Acme"
-    d.call_started("training")
-    assert d.db.one("SELECT brief FROM calls WHERE id = ?", [d.call_id])["brief"] == "Middle Python в Acme"
+    d.voice.call_started("training")
+    assert d.db.one("SELECT brief FROM calls WHERE id = ?", [d.voice.call_id])["brief"] == "Middle Python в Acme"

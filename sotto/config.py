@@ -47,6 +47,9 @@ class Answer:
     auto_pause_ms: int = 0        # доп. пауза после реплики собеседника перед авто-ответом (VAD уже ждёт 0.5 с тишины)
     early: bool = True  # упреждение: подсказка начинает писаться через 0.2 с паузы собеседника (скрыто), ~1 с быстрее
     max_tokens: int = 350
+    # Подсказка на неродном языке (родной берётся из профиля) обрезается до стольких слов
+    # в коде, даже если модель не уложилась: кандидат читает её вслух. 0 — не обрезать.
+    nonnative_word_limit: int = 25
 
 
 @dataclass
@@ -94,6 +97,7 @@ class Hotkeys:
     screen_region: str = "SUPER + SHIFT + X"  # … по выделенной области
     questions: str = "SUPER + SHIFT + A"      # какие вопросы задать собеседнику
     toggle_overlay: str = "SUPER + H"         # спрятать/показать оверлей
+    overlay_edit: str = "SUPER + SHIFT + O"   # передвинуть/растянуть оверлей (иначе он прозрачен для мыши)
     toggle_mode: str = ""
     toggle_call: str = ""
     scroll_up: str = ""

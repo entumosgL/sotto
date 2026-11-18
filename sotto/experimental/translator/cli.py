@@ -121,4 +121,3 @@ def main(action: str, text: str = "") -> int:
         except KeyboardInterrupt:
             return 0
     return 1
-

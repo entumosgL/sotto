@@ -4,13 +4,18 @@ import numpy as np
 import pytest
 
 from sotto import config as config_mod
-from sotto.agents import extract_json
-from sotto.audio.speakers import VoiceRegistry
-from sotto.copilot import context, prompts
-from sotto.copilot.listener import INTRO, is_hallucination
-from sotto.db import DB
-from sotto.jobs.extract import contacts, looks_like_job, text_hash
-from sotto.sim.bench import cer, understood_task
+from sotto.application.legend import LegendService
+from sotto.application.prompting import system_prompt
+from sotto.domain.jobs import contacts, looks_like_job, text_hash
+from sotto.domain.legend import LegendItem, claims
+from sotto.domain.speech import INTRO, is_hallucination, name_from_intro
+from sotto.domain.transcript import format_transcript
+from sotto.infrastructure.audio.speakers import VoiceRegistry
+from sotto.infrastructure.llm.agents import extract_json
+from sotto.infrastructure.prompts import prompts
+from sotto.infrastructure.sqlite.db import DB
+from sotto.infrastructure.sqlite.repositories import Repositories
+from sotto.interfaces.cli.sim.bench import cer, understood_task
 
 
 def test_config_roundtrip(isolated_dirs):
@@ -30,15 +35,15 @@ def test_config_roundtrip(isolated_dirs):
 
 def test_legend_extraction():
     text = "Да, [[в 2023 переводил биллинг на Kafka]] и ещё [[вёл команду из 4 человек]]. [[в 2023 переводил биллинг на Kafka]]"
-    assert context.extract_legend(text) == ["в 2023 переводил биллинг на Kafka", "вёл команду из 4 человек"]
+    assert claims(text) == ["в 2023 переводил биллинг на Kafka", "вёл команду из 4 человек"]
 
 
 def test_system_prompt_contains_profile_legend_and_rule():
-    sp = context.system_prompt("answer", allow_invention=True, profile="Go-разработчик",
-                               legend=[{"claim": "работал в Ozon", "note": "2 года"}], brief="Компания X")
+    sp = system_prompt(prompts.load("answer"), allow_invention=True, profile="Go-разработчик",
+                       legend=[LegendItem(id=1, claim="работал в Ozon", note="2 года", created_at=0)], brief="Компания X")
     assert "Go-разработчик" in sp and "работал в Ozon" in sp and "2 года" in sp and "Компания X" in sp
     assert "[[" in sp  # правило о пометке придуманного подставилось
-    sp2 = context.system_prompt("answer", allow_invention=False, profile="", legend=[], brief=None)
+    sp2 = system_prompt(prompts.load("answer"), allow_invention=False, profile="", legend=[], brief=None)
     assert "Не придумывай опыт" in sp2 and "{invention_rule}" not in sp2
 
 
@@ -53,7 +58,7 @@ def test_prompt_override(isolated_dirs):
 def test_transcript_format():
     rows = [{"channel": "them", "speaker": "Анна", "speaker_role": "HR", "started_at": time.time(), "text": "Привет"},
             {"channel": "me", "speaker": "Я", "started_at": time.time(), "text": "Здравствуйте"}]
-    out = context.format_transcript(rows)
+    out = format_transcript(rows)
     assert "Анна, HR: Привет" in out and "Я (кандидат): Здравствуйте" in out
 
 
@@ -117,11 +122,13 @@ def test_db_and_legend(isolated_dirs):
     sp = db.insert("speakers", call_id=call, label="Собеседник 1", name="Анна", role="HR")
     db.insert("utterances", call_id=call, speaker_id=sp, channel="them", started_at=time.time(),
               ended_at=time.time(), text="Расскажите о себе")
-    rows = db.call_transcript(call)
+    repos = Repositories(db)
+    rows = repos.calls.transcript(call)
     assert rows[0]["speaker"] == "Анна" and rows[0]["speaker_role"] == "HR"
     db.insert("legend", claim="X", created_at=time.time())
     db.insert("legend", claim="Y", created_at=time.time(), active=0)
-    assert [x["claim"] for x in db.active_legend()] == ["X"]
+    legend = LegendService(repos.calls, repos.legend, repos.interviews)
+    assert [x.claim for x in legend.for_call(None)] == ["X"]
 
 
 @pytest.mark.parametrize("text,name", [
@@ -131,5 +138,4 @@ def test_db_and_legend(isolated_dirs):
     ("Я рада вас видеть", None),
 ])
 def test_name_from_intro(text, name):
-    from sotto.copilot.listener import name_from_intro
     assert name_from_intro(text) == name

@@ -3,6 +3,7 @@ import os
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ["SOTTO_PLATFORM"] = "null"  # ни звука, ни окон, ни хоткеев
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +22,9 @@ def isolated_dirs(tmp_path, monkeypatch):
     paths.ensure_dirs()
     # Настоящие CLI-агенты (claude, codex…) в тестах не запускаем: фоновые задачи вроде обновления тем
     # получат «нет агентов». Тесты, которым агент нужен, подменяют его сами.
-    from sotto.agents import Agents
+    from sotto.infrastructure import platform
+    from sotto.infrastructure.llm.agents import Agents
+    from sotto.infrastructure.platform.null import NullPlatform
     monkeypatch.setattr(Agents, "installed", lambda self: [])
+    platform.use(NullPlatform())
     yield tmp_path

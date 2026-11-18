@@ -3,13 +3,12 @@
 import asyncio
 
 from fastapi.testclient import TestClient
+from test_engine import FakeLLM
 
 from sotto import config as config_mod
-from sotto.daemon import Daemon
-from sotto.openrouter import Completion
-from sotto.web.app import build_app
-
-from test_engine import FakeLLM
+from sotto.bootstrap import Sotto
+from sotto.infrastructure.llm.openrouter import Completion
+from sotto.interfaces.web.app import build_app
 
 
 class FakeChatLLM(FakeLLM):
@@ -26,9 +25,8 @@ class FakeChatLLM(FakeLLM):
 def make(replies, interviewer=()):
     cfg = config_mod.Config()
     cfg.recording.enabled = False
-    d = Daemon(cfg, with_overlay=False, with_hyprland=False)
+    d = Sotto(cfg, with_overlay=False, with_desktop=False, llm=FakeChatLLM(replies, interviewer))
     d.bus.bind(asyncio.get_running_loop())
-    d.llm = FakeChatLLM(replies, interviewer)
     return d
 
 
@@ -48,10 +46,10 @@ async def test_self_mode_hint_then_candidate_said_it(isolated_dirs):
     assert s.hint == "∅"
     await s.candidate("My own words")
     await s.ask("And then?")
-    rows = [(r["channel"], r["text"]) for r in d.db.call_transcript(s.call_id)]
+    rows = [(r["channel"], r["text"]) for r in d.repos.calls.transcript(s.call_id)]
     assert rows == [("them", "How did you avoid double processing?"), ("me", "I used Redis locks for that."),
                     ("them", "Okay, thanks."), ("me", "My own words"), ("them", "And then?")]
-    assert d.db.active_legend(call_id=s.call_id) == []  # на тренировках легенды нет
+    assert d.legend.for_call(s.call_id) == []  # на тренировках легенды нет
     assert d.db.one("SELECT COUNT(*) AS n FROM legend")["n"] == 0
     await s.end()
     assert d.db.one("SELECT ended_at FROM calls WHERE id = ?", [s.call_id])["ended_at"]
@@ -64,7 +62,7 @@ async def test_interviewer_mode(isolated_dirs):
     await wait_idle(s)
     assert s.hint == "Hi Emily, I'm Alex."
     await s.candidate("")                      # пустой ответ = подсказка
-    rows = [(r["channel"], r["text"]) for r in d.db.call_transcript(s.call_id)]
+    rows = [(r["channel"], r["text"]) for r in d.repos.calls.transcript(s.call_id)]
     assert rows[1] == ("me", "Hi Emily, I'm Alex.") and rows[2] == ("them", "What did you build?")
     assert s.hint == "I built it with FastAPI."
     assert s.plan == "PLAN"
@@ -72,7 +70,7 @@ async def test_interviewer_mode(isolated_dirs):
 
 def test_pages_and_voice_off(isolated_dirs):
     cfg = config_mod.Config()
-    d = Daemon(cfg, with_overlay=False, with_hyprland=False)
+    d = Sotto(cfg, with_overlay=False, with_desktop=False)
     c = TestClient(build_app(d), base_url=f"http://127.0.0.1:{cfg.web.port}")
     assert c.get("/api/status").json()["voice"] is False
     assert "Запустить суфлёр" in c.get("/").text

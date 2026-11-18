@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Резюме и письма — Sotto{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>Резюме и письма</h1>
+    <p class="lead">Базовое резюме собирает агент из <a href="/profile">профиля</a>. Для каждого кластера похожих вакансий — свой вариант резюме и шаблон письма: <code>{greeting}</code>, <code>{position}</code>, <code>{company}</code> подставляются сами.</p>
+  </div>
+</div>
+
+<div class="grid-2" style="align-items:start">
+{% for lang, title, text in [("ru", "Базовое резюме · RU", base_ru), ("en", "Base resume · EN", base_en)] %}
+<div class="card">
+  <div class="card-head"><h3>{{ title }}</h3><span class="spacer"></span>
+    {% if text %}<a class="btn btn-ghost btn-sm" href="/resume/base/{{ lang }}.pdf" target="_blank">PDF</a>{% endif %}</div>
+  <form method="post" action="/resume/base/{{ lang }}/generate" class="row" style="margin-bottom:12px">
+    <label class="check small" style="margin:0"><input type="checkbox" name="use_legend" value="1" {% if use_legend %}checked{% endif %}> учитывать легенду</label>
+    <span class="spacer"></span>
+    <button class="btn-secondary btn-sm">{{ "Пересобрать агентом" if text else "Собрать агентом" }}</button>
+  </form>
+  <form method="post" action="/resume/base/{{ lang }}">
+    <div class="field"><textarea name="text" class="code" style="min-height:{{ 340 if text else 110 }}px" aria-label="{{ title }}">{{ text }}</textarea></div>
+    <button class="btn-sm">Сохранить</button>
+  </form>
+</div>
+{% endfor %}
+</div>
+
+<div class="section-head"><h2>По кластерам</h2><span class="count">{{ clusters|length }}</span></div>
+{% for c in clusters %}
+<div class="card">
+  <div class="card-head">
+    <h3>{{ c.name }}</h3><a class="small" href="/jobs?cluster={{ c.id }}">{{ c.n }} вакансий</a>
+    <span class="spacer"></span>
+    {% if c.resume_md %}<span class="badge ok">готово</span><a class="btn btn-ghost btn-sm" href="/resume/cluster/{{ c.id }}.pdf" target="_blank">PDF</a>{% else %}<span class="badge">нет резюме</span>{% endif %}
+    <form method="post" action="/resume/cluster/{{ c.id }}/generate"><button class="btn-secondary btn-sm">{{ "Пересобрать" if c.resume_md else "Сгенерировать резюме и письмо" }}</button></form>
+  </div>
+  {% if c.description %}<p class="muted small">{{ c.description }}</p>{% endif %}
+  <details class="fold"><summary>Редактировать</summary>
+    <form method="post" action="/resume/cluster/{{ c.id }}">
+      <div class="field"><label>Название кластера</label><input type="text" name="name" value="{{ c.name }}"></div>
+      <div class="grid-2" style="margin-bottom:12px">
+        <div class="field"><label>Резюме (Markdown)</label><textarea name="resume_md" class="code" style="min-height:320px">{{ c.resume_md or "" }}</textarea></div>
+        <div class="field"><label>Шаблон письма</label><textarea name="letter_md" style="min-height:320px">{{ c.letter_md or "" }}</textarea></div>
+      </div>
+      <button class="btn-sm">Сохранить</button>
+    </form>
+  </details>
+</div>
+{% else %}
+<div class="card empty">Кластеров ещё нет: они появятся после сбора вакансий.</div>
+{% endfor %}
+{% endblock %}
