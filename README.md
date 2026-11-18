@@ -164,10 +164,12 @@ Ctrl+C в терминале останавливает всё. Дальше в�
 **DeepSeek напрямую.** Если DeepSeek устраивает как модель ответов, можно платить ему без прослойки
 (дешевле, плюс собственный кэш контекста): ключ на platform.deepseek.com → в панели «Настройки → DeepSeek
 напрямую», или `[providers.deepseek] api_key` в config.toml, или переменная `DEEPSEEK_API_KEY`. Дальше запиши
-модель как `deepseek/deepseek-chat` в нужных ролях `[models]` — с ключом она пойдёт на api.deepseek.com,
-без ключа — через OpenRouter, где тот же идентификатор тоже работает. У DeepSeek нет распознавания речи
-и картинок: STT и `vision` остаются на OpenRouter или локально. Стоимость ответов считается по прайс-таблице
-(она в `sotto/infrastructure/llm/deepseek.py`, проверяй актуальность).
+модель как `deepseek/deepseek-flash` в нужных ролях `[models]` — с ключом она пойдёт на api.deepseek.com,
+без ключа — через OpenRouter. У `deepseek-flash` есть и **зрение**: скриншоты (роль `vision`) можно слать
+туда же. Thinking-режим, который у DeepSeek включён по умолчанию, для подсказок выключается сам — иначе
+первые слова приходили бы слишком поздно. Распознавания речи в совместимом виде нет: STT остаётся на
+OpenRouter или локально. Стоимость ответов считается по прайс-таблице (пик; вне пика вдвое дешевле) —
+она в `sotto/infrastructure/llm/deepseek.py`, проверяй актуальность.
 
 Другие провайдеры добавляются так же: клиент от `ChatAPI` в `sotto/infrastructure/llm/`, запись в
 `Providers` (config.py) и ветка в `RoutedLLM` (`infrastructure/llm/router.py`).

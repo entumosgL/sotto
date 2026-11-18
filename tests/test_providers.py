@@ -52,22 +52,41 @@ def test_reconfigure_adds_and_drops_provider():
 
 def test_deepseek_body_has_no_openrouter_fields():
     ds = DeepSeek("sk-test")
-    body = ds._body("deepseek-chat", [{"role": "user", "content": "hi"}], max_tokens=100, temperature=0.4,
+    body = ds._body("deepseek-flash", [{"role": "user", "content": "hi"}], max_tokens=100, temperature=0.4,
                     session_id="s1", reasoning=False, stream=True)
-    assert body["model"] == "deepseek-chat"
+    assert body["model"] == "deepseek-flash"
     for field in ("provider", "session_id", "reasoning", "usage"):
         assert field not in body
     assert body["stream_options"] == {"include_usage": True}
 
 
+def test_deepseek_thinking_disabled_for_hints():
+    ds = DeepSeek("sk-test")
+    kw = dict(max_tokens=100, temperature=0.4, session_id=None, stream=False)
+    off = ds._body("deepseek-flash", [], reasoning=False, **kw)
+    on = ds._body("deepseek-flash", [], reasoning=True, **kw)
+    assert off["thinking"] == {"type": "disabled"}   # thinking по умолчанию включён — гасим ради задержки
+    assert on["thinking"] == {"type": "enabled"}
+
+
+def test_deepseek_legacy_names_map_to_flash():
+    ds = DeepSeek("sk-test")
+    body = ds._body("deepseek-v4.1-flash", [], max_tokens=100, temperature=0.4,
+                    session_id=None, reasoning=False, stream=False)
+    assert body["model"] == "deepseek-flash"
+    assert ds._model("deepseek-chat") == "deepseek-flash"
+    assert ds._model("deepseek-v4-pro") == "deepseek-v4-pro"
+
+
 def test_deepseek_cost_uses_cache_prices():
     ds = DeepSeek("sk-test")
     usage = {"prompt_tokens": 10_000, "prompt_cache_hit_tokens": 8_000, "completion_tokens": 1_000}
-    cost = ds._cost("deepseek-chat", usage)
-    expected = (2_000 * 0.28 + 8_000 * 0.028 + 1_000 * 0.42) / 1_000_000
+    cost = ds._cost("deepseek-flash", usage)
+    expected = (2_000 * 0.30 + 8_000 * 0.006 + 1_000 * 1.20) / 1_000_000
     assert cost == pytest.approx(expected)
+    assert ds._cost("deepseek-chat", usage) == pytest.approx(expected)  # старое имя биллится как Flash
     assert ds._cost("unknown-model", usage) is None
-    assert ds._cost("deepseek-chat", {}) is None
+    assert ds._cost("deepseek-flash", {}) is None
 
 
 async def test_deepseek_cannot_transcribe():

@@ -28,13 +28,13 @@
 </div>
 
 <div class="card">
-  <div class="card-head"><h3>DeepSeek напрямую</h3><span class="hint-text">только текст: речь и картинки остаются на OpenRouter или локально</span>
+  <div class="card-head"><h3>DeepSeek напрямую</h3><span class="hint-text">текст и скриншоты (deepseek-flash); речь остаётся на OpenRouter или локально</span>
     <span class="spacer"></span><span class="badge {{ 'ok' if deepseek_set else 'warn' }}">{{ "ключ задан" if deepseek_set else "нет ключа" }}</span></div>
   <div class="form-grid">
     <div class="field"><label>Ключ</label>
       <input type="password" name="providers.deepseek.api_key" autocomplete="off" placeholder="{{ 'оставь пустым, чтобы не менять' if deepseek_set else 'sk-…' }}">
       <div class="help">platform.deepseek.com → API Keys; можно переменной DEEPSEEK_API_KEY. Модели вида
-        <code>deepseek/deepseek-chat</code> с ключом идут напрямую (дешевле, свой кэш контекста), без ключа — через OpenRouter.</div></div>
+        <code>deepseek/deepseek-flash</code> с ключом идут напрямую (дешевле, свой кэш контекста), без ключа — через OpenRouter.</div></div>
   </div>
 </div>
 
