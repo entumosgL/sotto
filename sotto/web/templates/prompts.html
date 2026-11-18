@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Промпты — Sotto{% endblock %}
+{% block content %}
+<h1>Промпты</h1>
+<p class="muted">Здесь все инструкции для моделей. Правь текст прямо тут или попроси агента переписать под пожелание. Свой вариант хранится файлом в <code>{{ prompts_dir }}/&lt;имя&gt;.md</code> и перекрывает встроенный: можно править и в редакторе, и копировать между машинами. «Сбросить» удаляет свой файл. Слова в фигурных скобках вроде <code>{profile}</code> подставляет программа — их не трогай.</p>
+{% for group, items in groups.items() %}
+<h2>{{ group }}</h2>
+{% for p in items %}
+<div class="card">
+  <b>{{ p.title }}</b> <span class="pill">{{ p.kind }}</span> {% if p.custom %}<span class="pill ok">свой</span>{% else %}<span class="pill">встроенный</span>{% endif %}
+  <details style="margin-top:8px"><summary>Изменить</summary>
+    <form method="post" action="/prompts/{{ p.kind }}">
+      <textarea name="text" style="min-height:260px">{{ p.text }}</textarea>
+      <p class="row"><button class="secondary">Сохранить</button></p>
+    </form>
+    <form method="post" action="/prompts/{{ p.kind }}/rewrite" class="row" style="margin-top:8px">
+      <input type="text" name="wishes" placeholder="Или пожелание агенту: «отвечай короче», «упор на Go и highload»…">
+      <button class="secondary">Переписать агентом</button>
+    </form>
+    {% if p.custom %}<form method="post" action="/prompts/{{ p.kind }}/reset" style="margin-top:8px"><button class="danger">Сбросить к встроенному</button></form>{% endif %}
+  </details>
+</div>
+{% endfor %}
+{% endfor %}
+{% endblock %}

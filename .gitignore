@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+result
+.direnv/
+*.egg-info/
+build/
+.venv/
+.pytest_cache/
+# личное — живёт в ~/.config/sotto и ~/.local/share/sotto, но на всякий случай
+config.toml
+profile.md
+vacancy.txt
+*.db
+*.db-wal
+*.db-shm
+*.mkv
+*.opus
+.env

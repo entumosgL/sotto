@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Текстовый режим — Sotto{% endblock %}
+{% block content %}
+<h1>Текстовый режим</h1>
+<p class="muted">Проверка подсказок без звука и микрофона. Подсказки те же, что на звонке: тот же промпт, профиль и бриф. Легенда здесь не копится: каждая сессия начинается с чистого листа. Оверлей и голосовой суфлёр они не трогают.</p>
+
+<div class="grid">
+  <div class="card">
+    <b>Я спрашиваю сам</b>
+    <p class="muted">Пишешь вопросы за собеседника, суфлёр подсказывает ответ. Если не написал ответ кандидата, считается, что он сказал подсказку.</p>
+    <form method="post" action="/chat/start">
+      <input type="hidden" name="mode" value="self">
+      <label>Роль, на которую собеседуют (необязательно)</label>
+      <input type="text" name="role" placeholder="например: Middle Python developer">
+      <p><button>Начать</button></p>
+    </form>
+  </div>
+  <div class="card">
+    <b>Спрашивает интервьюер</b>
+    <p class="muted">Тренер ведёт собеседование по плану, в том числе по пробелам между резюме и вакансией. Ты отвечаешь текстом: в поле ответа уже стоит подсказка, можно отправить её как есть или поправить.</p>
+    <form method="post" action="/chat/start">
+      <input type="hidden" name="mode" value="interviewer">
+      <label>Язык</label>
+      <select name="lang"><option value="en">английский</option><option value="ru">русский</option></select>
+      <label>Вакансия{% if from_interview %} — ближайшего собеседования{% endif %} (можно заменить)</label>
+      <textarea name="vacancy" placeholder="Вставь текст вакансии или оставь пустым и укажи роль ниже">{{ vacancy }}</textarea>
+      <label>Роль, если вакансии нет</label>
+      <input type="text" name="role" placeholder="например: backend developer">
+      <p><button>Начать</button></p>
+    </form>
+  </div>
+</div>
+
+{% if sessions %}
+<h2>Открытые сессии</h2>
+<div class="card"><table>
+  {% for s in sessions %}
+  <tr><td><a href="/chat/{{ s.id }}">{{ s.role }}</a></td><td class="muted">{{ "сам спрашиваю" if s.mode == "self" else "интервьюер" }}</td><td class="muted">{{ "закончена" if s.ended else "идёт" }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{% if past %}
+<h2>Прошлые текстовые сессии</h2>
+<div class="card"><table>
+  {% for c in past %}
+  <tr><td><a href="/calls/{{ c.id }}">{{ c.title }}</a></td><td class="muted">{{ c.started_at|dt }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+{% endblock %}

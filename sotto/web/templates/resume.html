@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Резюме — Sotto{% endblock %}
+{% block content %}
+<h1>Резюме и письма</h1>
+<p class="muted">Базовое резюме собирается агентом из <a href="/profile">профиля</a>. Для каждого кластера похожих вакансий — свой вариант резюме и шаблон письма ({greeting}, {position}, {company} подставляются сами). Под конкретную вакансию правится на её странице.</p>
+
+{% for lang, title, text in [("ru", "Базовое резюме (RU)", base_ru), ("en", "Base resume (EN)", base_en)] %}
+<div class="card">
+  <b>{{ title }}</b>
+  <form method="post" action="/resume/base/{{ lang }}/generate" class="row" style="margin:8px 0">
+    <label class="check"><input type="checkbox" name="use_legend" value="1" {% if use_legend %}checked{% endif %}> учитывать легенду</label>
+    <button class="secondary">{{ "Пересобрать агентом" if text else "Собрать агентом" }}</button>
+    {% if text %}<a class="button" style="background:transparent;color:var(--accent)" href="/resume/base/{{ lang }}.pdf" target="_blank">PDF</a>{% endif %}
+  </form>
+  <form method="post" action="/resume/base/{{ lang }}">
+    <textarea name="text" style="min-height:{{ 360 if text else 100 }}px">{{ text }}</textarea>
+    <p><button>Сохранить</button></p>
+  </form>
+</div>
+{% endfor %}
+
+<h2>По кластерам</h2>
+{% for c in clusters %}
+<div class="card">
+  <b>{{ c.name }}</b> <span class="muted">{{ c.n }} вакансий · <a href="/jobs?cluster={{ c.id }}">посмотреть</a></span>
+  {% if c.description %}<p class="muted">{{ c.description }}</p>{% endif %}
+  <form method="post" action="/resume/cluster/{{ c.id }}/generate" class="row" style="margin:6px 0">
+    <button class="secondary">{{ "Пересобрать агентом" if c.resume_md else "Сгенерировать резюме и письмо" }}</button>
+    {% if c.resume_md %}<a class="button" style="background:transparent;color:var(--accent)" href="/resume/cluster/{{ c.id }}.pdf" target="_blank">PDF</a>{% endif %}
+  </form>
+  <details><summary>Редактировать</summary>
+    <form method="post" action="/resume/cluster/{{ c.id }}">
+      <label>Название кластера</label><input type="text" name="name" value="{{ c.name }}">
+      <label>Резюме (Markdown)</label><textarea name="resume_md" style="min-height:320px">{{ c.resume_md or "" }}</textarea>
+      <label>Шаблон письма</label><textarea name="letter_md" style="min-height:180px">{{ c.letter_md or "" }}</textarea>
+      <p><button>Сохранить</button></p>
+    </form>
+  </details>
+</div>
+{% else %}
+<p class="muted">Кластеров ещё нет — они появятся после сбора вакансий.</p>
+{% endfor %}
+{% endblock %}

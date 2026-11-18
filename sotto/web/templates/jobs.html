@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Вакансии — Sotto{% endblock %}
+{% block content %}
+<h1>Вакансии</h1>
+<div class="row card">
+  <form method="post" action="/jobs/fetch" class="inline"><button>Собрать новые</button></form>
+  <form method="get" action="/jobs" class="row" style="flex:1">
+    <input type="search" name="q" value="{{ q }}" placeholder="Поиск по смыслу: «go highload удалёнка», «ML в финтехе»">
+    <select name="status" style="max-width:180px">
+      {% for v, t in [("active","все, кроме скрытых"),("new","новые"),("ready","готовые к отклику"),("sent","отправленные"),("replied","ответили"),("hidden","скрытые")] %}
+      <option value="{{ v }}" {% if status_filter == v %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+    {% if cluster is not none %}<input type="hidden" name="cluster" value="{{ cluster }}">{% endif %}
+    <button class="secondary">Показать</button>
+  </form>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <b>Кластеры</b> <span class="muted">— одно резюме и письмо на группу похожих вакансий</span>
+    <p><a href="/jobs" {% if cluster is none %}style="font-weight:700"{% endif %}>все</a>
+    {% for c in clusters %} · <a href="/jobs?cluster={{ c.id }}" {% if cluster == c.id %}style="font-weight:700"{% endif %}>{{ c.name }} ({{ c.n }})</a>{% if not c.resume_md %} <span class="muted">нет резюме</span>{% endif %}{% endfor %}</p>
+    <p class="muted"><a href="/resume">Резюме и письма по кластерам →</a></p>
+  </div>
+  <div class="card">
+    <b>Поисковые запросы</b> <span class="muted">— агент пополняет их сам после каждого сбора</span>
+    <p>{% for qq in queries %}<form method="post" action="/jobs/queries/{{ qq.id }}/toggle" class="inline"><button class="secondary" style="padding:1px 8px;margin:2px;{% if not qq.active %}opacity:.45{% endif %}" title="{{ qq.source }}, найдено ~{{ qq.hits }}">{{ qq.query }}</button></form>{% else %}<span class="muted">Пусто: заполни профиль и нажми «Предложить».</span>{% endfor %}</p>
+    <div class="row">
+      <form method="post" action="/jobs/queries/add" class="row" style="flex:1"><input type="text" name="query" placeholder="Новый запрос"><button class="secondary">+</button></form>
+      <form method="post" action="/jobs/queries/suggest" class="inline"><button class="secondary">Предложить агентом</button></form>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  {% for v in vacancies %}
+  <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+    <a href="/jobs/{{ v.id }}"><b>{{ v.title or "Без названия" }}</b></a>
+    {% if v.company %} · {{ v.company }}{% endif %}
+    {% if v.salary %} · {{ v.salary }}{% endif %}
+    {% if v.remote %} · <span class="pill">{{ v.remote }}</span>{% endif %}
+    {% if v.fit is not none %} · <span class="pill {{ 'ok' if v.fit >= 0.7 else '' }}">подходит {{ (v.fit * 100)|round|int }}%</span>{% endif %}
+    {% if v.status != "new" %} · <span class="pill">{{ v.status }}</span>{% endif %}
+    <div class="muted">{{ v.source }} · {{ v.found_at|dt }}{% if v.cluster_name %} · {{ v.cluster_name }}{% endif %}
+      {% for c in v.contacts_list[:3] %} · {{ c.value }}{% endfor %}</div>
+    {% if v.summary %}<div>{{ v.summary }}</div>{% endif %}
+  </div>
+  {% else %}
+  <p class="muted">Вакансий пока нет. Настрой источники ниже и нажми «Собрать новые».</p>
+  {% endfor %}
+</div>
+
+<h2>Источники</h2>
+<form method="post" action="/jobs/settings">
+<div class="grid">
+  <div class="card">
+    <b>Telegram</b> {% if tg_logged %}<span class="pill ok">вход выполнен</span>{% else %}<span class="pill bad">нужен вход</span>{% endif %}
+    <p class="muted">api_id/api_hash — с my.telegram.org. Вход один раз в терминале: <code>sotto jobs login-telegram</code>. Лучше второй аккаунт.</p>
+    <label>api_id</label><input type="number" name="jobs.telegram.api_id" value="{{ j.telegram.api_id or '' }}">
+    <label>api_hash (пусто — не менять)</label><input type="password" name="jobs.telegram.api_hash" placeholder="{{ 'задан' if j.telegram.api_hash else '' }}">
+    <label>Каналы и чаты с вакансиями (по одному: @name или ссылка)</label>
+    <textarea name="jobs.telegram.channels" style="min-height:100px">{{ j.telegram.channels|join("\n") }}</textarea>
+    <label>Сообщений в сутки (не больше)</label><input type="number" name="jobs.telegram.daily_send_limit" value="{{ j.telegram.daily_send_limit }}">
+  </div>
+  <div class="card">
+    <b>LinkedIn</b> {% if li_logged %}<span class="pill ok">профиль браузера есть</span>{% else %}<span class="pill bad">нужен вход</span>{% endif %}
+    <p class="muted">Вход в отдельном профиле браузера: <code>sotto jobs login-linkedin</code>. Читается раздел Jobs и посты «ищем/hiring». Отправку Sotto не автоматизирует: откроет страницу и положит текст в буфер.</p>
+    <label class="check"><input type="checkbox" name="jobs.linkedin.enabled" value="1" {% if j.linkedin.enabled %}checked{% endif %}> Собирать из LinkedIn</label>
+    <label>Страниц в сутки (не больше)</label><input type="number" name="jobs.linkedin.daily_page_limit" value="{{ j.linkedin.daily_page_limit }}">
+  </div>
+  <div class="card">
+    <b>Почта</b> <span class="muted">— для вакансий с e-mail</span>
+    <label>SMTP-сервер</label><input type="text" name="jobs.email.smtp_host" value="{{ j.email.smtp_host }}" placeholder="smtp.gmail.com / smtp.yandex.ru">
+    <label>Порт</label><input type="number" name="jobs.email.smtp_port" value="{{ j.email.smtp_port }}">
+    <label>Адрес</label><input type="text" name="jobs.email.username" value="{{ j.email.username }}">
+    <label>Пароль приложения (пусто — не менять)</label><input type="password" name="jobs.email.password">
+    <label>Имя отправителя</label><input type="text" name="jobs.email.from_name" value="{{ j.email.from_name }}">
+    <label>Писем в сутки (не больше)</label><input type="number" name="jobs.email.daily_send_limit" value="{{ j.email.daily_send_limit }}">
+  </div>
+</div>
+<p><button>Сохранить источники</button></p>
+</form>
+{% endblock %}

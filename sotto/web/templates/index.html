@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Главная</h1>
+
+{% if not status.api_key or not profile_filled %}
+<div class="card">
+  <b>Что осталось настроить</b>
+  <ul>
+    {% if not status.api_key %}<li>Ключ OpenRouter — <a href="/settings">Настройки</a>. Без него нет подсказок и расшифровки (запись экрана и звука работает и так).</li>{% endif %}
+    {% if not profile_filled %}<li>Профиль — <a href="/profile">кто ты и какой у тебя опыт</a>. На нём строятся все ответы.</li>{% endif %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <b>Голосовой суфлёр</b>
+  <span class="pill {{ 'ok' if status.voice else '' }}">{{ "работает" if status.voice else "выключен" }}</span>
+  <p class="muted">Слушает микрофон и звук звонка, сам замечает звонок, показывает подсказки в оверлее, пишет экран. Работает, пока запущена команда <code>sotto</code>; закрытие этой вкладки его не останавливает.</p>
+  <form class="inline" onsubmit="ctl(event,'{{ 'voice_stop' if status.voice else 'voice_start' }}')"><button id="voice-btn" data-voice="{{ 'true' if status.voice else 'false' }}" class="{{ 'danger' if status.voice else '' }}">{{ "Остановить суфлёр" if status.voice else "Запустить суфлёр" }}</button></form>
+  <a href="/chat" style="margin-left:12px">Проверить подсказки текстом</a>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <b>Сейчас</b>
+    <p>
+      Звонок: <span class="pill">{{ "идёт" if status.in_call else "нет" }}</span>
+      Режим: <span class="pill">{{ "авто-ответы" if status.mode == "auto" else "по хоткею" }}</span>
+      {% if status.record_only %}<span class="pill">только запись</span>{% endif %}
+      {% if status.stage %}<span class="pill">сцена включена</span>{% endif %}
+    </p>
+    {% if not status.voice %}<p class="muted">Звонки замечаются, когда голосовой суфлёр запущен.</p>{% else %}
+    <div class="row">
+      <form class="inline" method="post" action="/api/ctl/toggle_call" onsubmit="ctl(event,'toggle_call')"><button class="secondary">{{ "Завершить звонок" if status.in_call else "Начать звонок вручную" }}</button></form>
+      <form class="inline" onsubmit="ctl(event,'toggle_mode')"><button class="secondary">Переключить режим</button></form>
+      <form class="inline" onsubmit="ctl(event,'toggle_record_only')"><button class="secondary">Только запись</button></form>
+    </div>{% endif %}
+  </div>
+  <div class="card">
+    <b>Расходы</b>
+    {% if credits %}<p>Баланс OpenRouter: <b>${{ "%.2f"|format(credits.total_credits - credits.total_usage) }}</b></p>{% endif %}
+    <p class="muted">За 30 дней: подсказки ({{ spent.n }} шт.) ${{ "%.3f"|format(spent.s or 0) }}, распознавание речи ${{ "%.3f"|format(spent.stt or 0) }}</p>
+  </div>
+  <div class="card">
+    <b>Агенты</b>
+    <p>
+    {% for a in agents %}
+      <span class="pill {{ 'ok' if a.installed and not a.cooling_until else 'bad' }}" title="{{ a.last_error or '' }}">{{ a.name }}{% if a.cooling_until %} (лимит){% endif %}{% if not a.installed %} (нет){% endif %}</span>
+    {% endfor %}
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <b>Ближайшие собеседования</b>
+  {% if upcoming %}<table>{% for i in upcoming %}
+    <tr><td><a href="/interviews/{{ i.id }}">{{ i.company }}</a>{% if i.stage %} <span class="muted">· {{ i.stage }}</span>{% endif %}</td>
+        <td class="muted">{{ i.scheduled_at|dt if i.scheduled_at else "без даты" }}</td>
+        <td>{% if i.link %}<a href="{{ i.link }}" target="_blank" rel="noopener">ссылка</a>{% endif %}</td></tr>
+  {% endfor %}</table>{% else %}<p class="muted">Не запланировано.</p>{% endif %}
+  <p><a href="/interviews#new">Запланировать</a> · звонок в это время сам получит бриф и компанию.</p>
+</div>
+
+<div class="card">
+  <details><summary><b>Бриф к следующему звонку вне плана</b></summary>
+  <p class="muted">Для звонка, которого нет в «Собеседованиях». Подсказки учтут компанию и вакансию.</p>
+  <form method="post" action="/brief"><textarea name="brief" placeholder="Компания, вакансия, кто будет на звонке…">{{ brief }}</textarea>
+    <p><button>Сохранить бриф</button></p></form>
+  <form method="post" action="/brief/generate"><textarea name="vacancy" placeholder="Вставь текст вакансии — агент составит бриф"></textarea>
+    <p><button class="secondary">Составить бриф агентом</button></p></form>
+  </details>
+</div>
+
+<h2>Последние звонки</h2>
+<div class="card">
+  <table>
+    {% for c in calls %}
+    <tr><td><a href="/calls/{{ c.id }}">{{ c.title or "Звонок #" ~ c.id }}</a></td>
+        <td class="muted">{{ c.started_at|dt }}</td><td class="muted">{{ c.app or "" }}</td></tr>
+    {% else %}
+    <tr><td class="muted">Пока пусто. Звонок определяется сам, когда приложение берёт микрофон, или кнопкой выше.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  async function ctl(ev, action) { ev.preventDefault(); await fetch("/api/ctl/" + action, {method: "POST"}); location.reload(); }
+</script>
+{% endblock %}

@@ -1,0 +1,24 @@
+title = "Test: English interview, auto mode, code-switching"
+intro = "Checks English recognition, answers in English and a mixed RU/EN question."
+mode = "auto"
+
+[[step]]
+say = "Hi, I'm Sarah, an engineering manager. Thanks for joining today."
+voice = "en_US-lessac-medium"
+wait = "skip"
+expect_name = "Sarah"
+
+[[step]]
+say = "Can you explain the difference between a process and a thread?"
+voice = "en_US-lessac-medium"
+keywords = ["memory", "address space", "share"]
+
+[[step]]
+say = "How would you design a rate limiter for a public API?"
+voice = "en_US-lessac-medium"
+keywords = ["token bucket", "sliding window", "redis", "bucket"]
+
+[[step]]
+say = "Расскажите, как вы использовали Kafka consumer groups на прошлом проекте."
+voice = "ru_RU-dmitri-medium"
+keywords = ["partition", "партиц", "offset", "consumer"]

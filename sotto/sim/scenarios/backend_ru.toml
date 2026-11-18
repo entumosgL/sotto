@@ -1,0 +1,35 @@
+title = "Тест: бэкенд-собеседование на русском, авто-режим, два интервьюера"
+intro = "Автоматическая проверка: распознавание, имена, авто-ответы, молчание на не-вопросах, задержки."
+mode = "auto"
+
+[[step]]
+say = "Добрый день! Меня зовут Анна, я HR в компании. Со мной коллега."
+voice = "ru_RU-irina-medium"
+wait = "skip"
+expect_name = "Анна"
+
+[[step]]
+say = "Привет, я Дмитрий, техлид бэкенда. Начнём с технических вопросов."
+voice = "ru_RU-dmitri-medium"
+wait = "skip"
+expect_name = "Дмитрий"
+
+[[step]]
+say = "Чем отличается уровень изоляции repeatable read от serializable в PostgreSQL?"
+voice = "ru_RU-dmitri-medium"
+keywords = ["фантом", "serializ", "сериализ", "аномал"]
+
+[[step]]
+say = "Хорошо. Как бы вы искали причину медленного запроса в продакшене?"
+voice = "ru_RU-dmitri-medium"
+keywords = ["explain", "индекс", "план"]
+
+[[step]]
+say = "Понятно, спасибо."
+voice = "ru_RU-dmitri-medium"
+wait = "skip"
+
+[[step]]
+say = "Расскажите о случае, когда вам пришлось быстро чинить инцидент."
+voice = "ru_RU-irina-medium"
+keywords = ["инцидент", "откат", "постмортем", "мониторинг", "алерт"]

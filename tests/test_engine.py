@@ -1,0 +1,201 @@
+"""Движок подсказок с поддельной моделью: авто-режим, пропуск «∅», легенда, отмена старого ответа."""
+
+import asyncio
+import time
+
+from sotto import config as config_mod
+from sotto.copilot.engine import Copilot
+from sotto.db import DB
+from sotto.events import EventBus
+from sotto.openrouter import Completion
+
+
+class FakeLLM:
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    async def stream_chat(self, model, messages, **_):
+        self.calls.append(messages)
+        text = self.replies.pop(0) if self.replies else "ok"
+        res = Completion(model=model)
+        for ch in [text[i:i + 5] for i in range(0, len(text), 5)]:
+            await asyncio.sleep(0.001)
+            res.text += ch
+            res.first_token_ms = res.first_token_ms or 10
+            yield ch, res
+        res.total_ms = 20
+        yield "", res
+
+
+async def collect(bus, seconds=0.3):
+    q = bus.subscribe()
+    await asyncio.sleep(seconds)
+    out = []
+    while not q.empty():
+        out.append(q.get_nowait())
+    return out
+
+
+async def make(replies, mode="auto"):
+    cfg = config_mod.Config()
+    cfg.answer.mode = mode
+    cfg.answer.auto_pause_ms = 10
+    db = DB()
+    bus = EventBus()
+    bus.bind(asyncio.get_running_loop())
+    llm = FakeLLM(replies)
+    cp = Copilot(cfg, db, bus, llm, them_speaking=lambda: False, stage_name=lambda: None)
+    call = db.insert("calls", started_at=time.time())
+    db.insert("utterances", call_id=call, channel="them", started_at=time.time(), ended_at=time.time(),
+              text="Как обеспечить идемпотентность?")
+    cp.set_call(call)
+    return cp, db, bus, llm
+
+
+async def test_auto_answer_saves_legend(isolated_dirs):
+    cp, db, bus, llm = await make(["Через ключ идемпотентности. [[В 2023 делал это в платежах]]"])
+    q = bus.subscribe()
+    cp.on_utterance("them")
+    await asyncio.sleep(0.3)
+    events = [q.get_nowait() for _ in range(q.qsize())]
+    done = [e for e in events if e["type"] == "answer.done"]
+    assert done and done[0]["legend"] == ["В 2023 делал это в платежах"]
+    call = db.one("SELECT id FROM calls")["id"]
+    assert db.active_legend(call)[0]["claim"] == "В 2023 делал это в платежах"
+    assert db.active_legend() == []          # в звонок без компании чужая легенда не идёт
+    assert db.one("SELECT kind FROM answers")["kind"] == "auto"
+
+
+async def test_legend_scoped_to_company(isolated_dirs):
+    cp, db, bus, llm = await make(["Ответ [[вёл миграцию в Ozon]]"])
+    call = db.one("SELECT id FROM calls")["id"]
+    db.set_call_company(call, "Acme")
+    cp.on_utterance("them")
+    await asyncio.sleep(0.3)
+    same = db.insert("calls", started_at=time.time(), company="acme ")
+    other = db.insert("calls", started_at=time.time(), company="Globex")
+    training = db.insert("calls", started_at=time.time(), app="training", company="Acme")
+    assert [x["claim"] for x in db.active_legend(same)] == ["вёл миграцию в Ozon"]
+    assert db.active_legend(other) == [] and db.active_legend(training) == []
+    db.insert("interviews", company="Acme", status="rejected", created_at=time.time())
+    assert db.cleanup_legend() == 1 and db.active_legend(same) == []
+
+
+async def test_auto_skip(isolated_dirs):
+    cp, db, bus, llm = await make(["∅"])
+    q = bus.subscribe()
+    cp.on_utterance("them")
+    await asyncio.sleep(0.3)
+    types = [q.get_nowait()["type"] for _ in range(q.qsize())]
+    assert "answer.skip" in types and "answer.delta" not in types
+    assert db.one("SELECT COUNT(*) AS n FROM answers")["n"] == 0
+
+
+async def test_manual_mode_ignores_utterances(isolated_dirs):
+    cp, db, bus, llm = await make(["x"], mode="manual")
+    cp.on_utterance("them")
+    await asyncio.sleep(0.1)
+    assert not llm.calls
+    await cp.answer("manual")
+    await asyncio.sleep(0.2)
+    assert len(llm.calls) == 1
+    system = llm.calls[0][0]["content"]
+    assert "Профиль кандидата" in system
+
+
+async def test_dual_style(isolated_dirs):
+    cp, db, bus, llm = await make(["коротко", "подробно"], mode="manual")
+    cp.cfg.answer.style = "dual"
+    q = bus.subscribe()
+    await cp.answer("manual")
+    await asyncio.sleep(0.3)
+    slots = {e["slot"] for e in [q.get_nowait() for _ in range(q.qsize())] if e["type"] == "answer.done"}
+    assert slots == {"short", "detailed"}
+
+
+async def test_skip_prefix_never_shown(isolated_dirs):
+    cp, db, bus, llm = await make(["∅ это не вопрос"])
+    q = bus.subscribe()
+    cp.on_utterance("them")
+    await asyncio.sleep(0.3)
+    types = [q.get_nowait()["type"] for _ in range(q.qsize())]
+    assert "answer.delta" not in types and "answer.skip" in types
+
+
+async def test_manual_answer_forbids_skip(isolated_dirs):
+    cp, db, bus, llm = await make(["Ответ"], mode="manual")
+    await cp.answer("manual")
+    await asyncio.sleep(0.2)
+    assert "Ответ обязателен" in llm.calls[0][1]["content"]
+
+
+def test_backchannel_and_whisper_tail():
+    from sotto.copilot.engine import is_backchannel
+    from sotto.copilot.listener import strip_hallucinations
+    assert is_backchannel("Угу, понятно.") and is_backchannel("Okay, got it.")
+    assert not is_backchannel("Хорошо. Как бы вы обеспечили идемпотентность?")
+    assert strip_hallucinations("Что такое MVCC? Продолжение следует...") == "Что такое MVCC?"
+
+
+def test_unfilled_profile_template_is_empty():
+    from sotto.copilot.prompts import is_filled
+    from sotto.setup import PROFILE_TEMPLATE
+    assert not is_filled(PROFILE_TEMPLATE) and is_filled("Go, 5 лет, платежи")
+
+
+async def test_speculation_is_hidden_until_confirmed(isolated_dirs):
+    """Упреждающая подсказка пишется скрыто и показывается, когда окончательная реплика совпала."""
+    cp, db, bus, llm = await make(["Через ключ идемпотентности в заголовке."])
+    q = bus.subscribe()
+    cp.speculate("А как бы вы сделали повторы платежей безопасными?")
+    await asyncio.sleep(0.2)
+    seen = []
+    while not q.empty():
+        seen.append(q.get_nowait()["type"])
+    assert not any(t.startswith("answer.") for t in seen), seen  # пока ничего не видно
+    db.insert("utterances", call_id=cp.call_id, channel="them", started_at=time.time(), ended_at=time.time(),
+              text="А как бы вы сделали повторы платежей безопасными?")
+    cp.on_utterance("them")
+    events = await collect(bus)
+    types = [e["type"] for e in events]
+    assert "answer.start" in types and "answer.done" in types
+    assert len(llm.calls) == 1  # вторую генерацию не запускали
+    assert db.one("SELECT text FROM answers")["text"] == "Через ключ идемпотентности в заголовке."
+
+
+async def test_speculation_dropped_when_question_changes(isolated_dirs):
+    cp, db, bus, llm = await make(["черновик", "настоящий ответ"])
+    cp.speculate("Расскажите про ваш опыт с Kafka в продакшене")
+    await asyncio.sleep(0.05)
+    db.insert("utterances", call_id=cp.call_id, channel="them", started_at=time.time(), ended_at=time.time(),
+              text="Расскажите про ваш опыт с Kafka в продакшене и почему не RabbitMQ")
+    cp.on_utterance("them")
+    await collect(bus)
+    assert len(llm.calls) == 2
+    assert db.one("SELECT text FROM answers ORDER BY id DESC")["text"] == "настоящий ответ"
+
+
+async def test_speculation_skips_unfinished_phrase(isolated_dirs):
+    cp, db, bus, llm = await make(["x"])
+    cp.speculate("Расскажите, как вы")
+    cp.speculate("Tell me about the")
+    await asyncio.sleep(0.05)
+    assert llm.calls == []
+
+
+async def test_cough_while_candidate_speaks_keeps_hint(isolated_dirs):
+    """Собеседник кашлянул посреди ответа кандидата — подсказку, которую он читает, не трогаем."""
+    cp, db, bus, llm = await make(["Новая подсказка"])
+    cp.me_speaking = lambda: True
+    db.insert("utterances", call_id=cp.call_id, channel="them", started_at=time.time() + 1,
+              ended_at=time.time() + 1, text="Кхм.")
+    cp.on_utterance("them")
+    await asyncio.sleep(0.3)
+    assert db.one("SELECT COUNT(*) AS n FROM answers")["n"] == 0
+    # настоящий вопрос посреди ответа — отвечаем
+    db.insert("utterances", call_id=cp.call_id, channel="them", started_at=time.time() + 2,
+              ended_at=time.time() + 2, text="А в чём была проблема?")
+    cp.on_utterance("them")
+    await asyncio.sleep(0.3)
+    assert db.one("SELECT COUNT(*) AS n FROM answers")["n"] == 1

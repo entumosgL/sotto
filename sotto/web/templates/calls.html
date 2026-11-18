@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Звонки — Sotto{% endblock %}
+{% block content %}
+<h1>Звонки</h1>
+<form method="get" action="/calls" class="row card">
+  <input type="search" name="q" value="{{ q }}" placeholder="Поиск по смыслу: «спрашивали про очереди», «HR из Озона», «system design»…">
+  <button>Найти</button>
+</form>
+
+{% if results is not none %}
+  {% for r in results %}
+  <div class="card">
+    <a href="/calls/{{ r.call.id }}"><b>{{ r.call.title or "Звонок #" ~ r.call.id }}</b></a>
+    <span class="muted">{{ r.call.started_at|dt }}</span>
+    {% if r.call.summary %}<p>{{ r.call.summary }}</p>{% endif %}
+    {% for m in r.matches %}<div class="muted">[{{ m.started_at|time }}] {{ m.text }}</div>{% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Ничего не нашлось.</p>
+  {% endfor %}
+{% else %}
+<div class="card">
+  <table>
+    <tr><th>Название</th><th>Начало</th><th>Длительность</th><th>Реплик</th><th>Приложение</th></tr>
+    {% for c in calls %}
+    <tr>
+      <td><a href="/calls/{{ c.id }}">{{ c.title or "Звонок #" ~ c.id }}</a>
+        {% if c.summary %}<div class="muted">{{ c.summary[:160] }}{% if c.summary|length > 160 %}…{% endif %}</div>{% endif %}</td>
+      <td class="muted">{{ c.started_at|dt }}</td>
+      <td class="muted">{{ ((c.ended_at or c.started_at) - c.started_at)|duration }}</td>
+      <td class="muted">{{ c.n }}</td>
+      <td class="muted">{{ c.app or "" }}</td>
+    </tr>
+    {% else %}
+    <tr><td class="muted">Звонков пока нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

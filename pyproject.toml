@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sotto"
+version = "0.1.0"
+description = "Невидимый ИИ-суфлёр для собеседований под Linux/Hyprland: подсказки, запись, поиск, тренеры, вакансии"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "fastapi", "uvicorn", "httpx", "jinja2", "python-multipart", "pydantic",
+  "numpy", "sherpa-onnx", "faster-whisper", "fastembed", "sqlite-vec",
+  "PySide6", "telethon", "playwright", "markdown", "weasyprint",
+]
+
+[project.scripts]
+sotto = "sotto.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["sotto*"]
+
+[tool.setuptools.package-data]
+sotto = ["web/templates/*.html", "web/static/*", "prompts/*.md", "sim/scenarios/*.toml", "experimental/translator/README.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
