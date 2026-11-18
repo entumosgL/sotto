@@ -25,6 +25,20 @@ class OpenRouter:
 
 
 @dataclass
+class DeepSeek:
+    # platform.deepseek.com → API Keys; или переменная DEEPSEEK_API_KEY.
+    api_key: str = ""
+    base_url: str = "https://api.deepseek.com/v1"
+
+
+@dataclass
+class Providers:
+    """Прямые провайдеры моделей. Модель вида «deepseek/deepseek-chat» при заданном ключе идёт напрямую
+    (дешевле и без прослойки), без ключа — через OpenRouter, где тот же идентификатор тоже работает."""
+    deepseek: DeepSeek = field(default_factory=DeepSeek)
+
+
+@dataclass
 class Models:
     """Модели OpenRouter по ролям. `sotto bench` подбирает их по реальным замерам."""
     # Подсказка. Выбрана слепым тестом на реальном собеседовании (оценивал живой интервьюер):
@@ -201,6 +215,7 @@ class Web:
 @dataclass
 class Config:
     openrouter: OpenRouter = field(default_factory=OpenRouter)
+    providers: Providers = field(default_factory=Providers)
     models: Models = field(default_factory=Models)
     answer: Answer = field(default_factory=Answer)
     audio: Audio = field(default_factory=Audio)
@@ -218,6 +233,9 @@ class Config:
     @property
     def api_key(self) -> str:
         return os.environ.get("OPENROUTER_API_KEY") or self.openrouter.api_key
+
+    def deepseek_api_key(self) -> str:
+        return os.environ.get("DEEPSEEK_API_KEY") or self.providers.deepseek.api_key
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -79,7 +79,7 @@ templates.env.filters["soon"] = interview_time
 templates.env.filters["rel"] = relative
 
 # Разделы конфига, которые можно менять формой настроек (остальное — только в config.toml).
-EDITABLE_SECTIONS = {"openrouter", "models", "answer", "recording", "calls", "agents"}
+EDITABLE_SECTIONS = {"openrouter", "providers", "models", "answer", "recording", "calls", "agents"}
 
 
 def back(request: Request, default: str = "/") -> RedirectResponse:
@@ -313,7 +313,8 @@ def build_app(s: Sotto) -> FastAPI:
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request):
-        return page(request, "settings.html", c=s.cfg, agents=s.agents.status(), platform=s.platform.name)
+        return page(request, "settings.html", c=s.cfg, agents=s.agents.status(), platform=s.platform.name,
+                    deepseek_set=bool(s.cfg.deepseek_api_key()))
 
     @app.post("/settings")
     async def settings_save(request: Request):

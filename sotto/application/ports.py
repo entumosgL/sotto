@@ -37,7 +37,7 @@ class Completion(Protocol):
 
 
 class LLM(Protocol):
-    """Языковая модель по API (OpenRouter): подсказки, распознавание, интервьюер."""
+    """Языковая модель по API (OpenRouter или прямой провайдер): подсказки, распознавание, интервьюер."""
     configured: bool
 
     async def chat(self, model: str, messages: list[dict], **kw: Any) -> Completion: ...

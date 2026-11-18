@@ -37,7 +37,7 @@ from .infrastructure import platform as platform_mod
 from .infrastructure.events import EventBus
 from .infrastructure.jobs import JobSources
 from .infrastructure.llm.agents import Agents
-from .infrastructure.llm.openrouter import OpenRouter
+from .infrastructure.llm.router import RoutedLLM
 from .infrastructure.media import FfmpegRecording, remove_parts
 from .infrastructure.platform.null import NullWM
 from .infrastructure.prompts import prompts
@@ -88,7 +88,7 @@ class Sotto:
         self.background = Background()
         self.stopping = threading.Event()
         self.prompts = prompts
-        self.llm = llm or OpenRouter(cfg.api_key, cfg.openrouter.base_url, cfg.openrouter.provider_sort)
+        self.llm = llm or RoutedLLM(cfg)
         self.agents = Agents(self.db, cfg.agents)
         self.search = Search(self.db)
 
@@ -148,7 +148,7 @@ class Sotto:
         """Перечитать config.toml без перезапуска. Объекты настроек обновляются на месте, поэтому
         запись, определение звонков, агенты и подсказки сразу видят новые значения."""
         config_mod.update_in_place(self.cfg, config_mod.load())
-        self.llm.reconfigure(self.cfg.api_key, self.cfg.openrouter.base_url, self.cfg.openrouter.provider_sort)
+        self.llm.reconfigure(self.cfg)
         self.voice.reload()
 
     @property

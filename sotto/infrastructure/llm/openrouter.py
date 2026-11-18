@@ -10,77 +10,39 @@
 from __future__ import annotations
 
 import base64
-import io
-import json
 import time
-import wave
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 import numpy as np
 
-from ...application.ports import LLMError
+from .chatapi import ChatAPI, ChatAPIError, Completion, wav_bytes
+
+__all__ = ["OpenRouter", "OpenRouterError", "Completion", "wav_bytes"]
 
 
-class OpenRouterError(LLMError):
+class OpenRouterError(ChatAPIError):
     pass
 
 
-@dataclass
-class Completion:
-    text: str = ""
-    first_token_ms: int | None = None
-    total_ms: int = 0
-    cost: float | None = None
-    model: str = ""
-    usage: dict[str, Any] = field(default_factory=dict)
+class OpenRouter(ChatAPI):
+    name = "OpenRouter"
 
-
-def wav_bytes(samples: np.ndarray, sample_rate: int = 16000) -> bytes:
-    """float32 [-1, 1] → WAV (16 bit mono)."""
-    pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(sample_rate)
-        w.writeframes(pcm.tobytes())
-    return buf.getvalue()
-
-
-class OpenRouter:
     def __init__(self, api_key: str, base_url: str = "https://openrouter.ai/api/v1",
                  provider_sort: str = "latency"):
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+        super().__init__(api_key, base_url, extra_headers={
+            "HTTP-Referer": "https://github.com/sotto-copilot",
+            "X-Title": "Sotto",
+        })
         self.provider_sort = provider_sort
         # Модели, у которых «размышления» нельзя выключить (например, Sonnet 5.5): им — минимальные.
         self.reasoning_required: set[str] = set()
-        self.http = httpx.AsyncClient(
-            timeout=httpx.Timeout(60.0, connect=10.0),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "https://github.com/sotto-copilot",
-                "X-Title": "Sotto",
-            },
-            http2=False,
-        )
-
-    @property
-    def configured(self) -> bool:
-        return bool(self.api_key)
 
     def reconfigure(self, api_key: str, base_url: str, provider_sort: str) -> None:
         """Новые настройки без перезапуска (ключ поменяли на сайте)."""
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+        super().reconfigure(api_key, base_url)
         self.provider_sort = provider_sort
-        self.http.headers["Authorization"] = f"Bearer {api_key}"
-
-    async def close(self) -> None:
-        await self.http.aclose()
 
     def _body(self, model: str, messages: list[dict], *, max_tokens: int, temperature: float,
               session_id: str | None, reasoning: bool, stream: bool,
@@ -105,6 +67,9 @@ class OpenRouter:
             body["response_format"] = {"type": "json_object"}
         return body
 
+    def _cost(self, model: str, usage: dict[str, Any]) -> float | None:
+        return usage.get("cost")  # стоимость считает сам OpenRouter
+
     async def stream_chat(self, model: str, messages: list[dict], *, max_tokens: int = 700,
                           temperature: float = 0.4, session_id: str | None = None,
                           reasoning: bool = False) -> AsyncIterator[tuple[str, Completion]]:
@@ -122,37 +87,10 @@ class OpenRouter:
                 return
             except httpx.HTTPError as e:
                 raise OpenRouterError(f"сеть: {e!r}") from e
-            except OpenRouterError as e:
+            except ChatAPIError as e:
                 if attempt == 0 and not result.text and self._learn_reasoning(model, str(e)):
                     continue
                 raise
-
-    async def _stream(self, body: dict[str, Any], result: Completion,
-                      start: float) -> AsyncIterator[tuple[str, Completion]]:
-        async with self.http.stream("POST", f"{self.base_url}/chat/completions", json=body) as resp:
-            if resp.status_code != 200:
-                raise OpenRouterError(f"{resp.status_code}: {(await resp.aread()).decode(errors='ignore')[:500]}")
-            async for line in resp.aiter_lines():
-                if not line.startswith("data:"):
-                    continue  # ": OPENROUTER PROCESSING" и пустые строки
-                payload = line[5:].strip()
-                if payload == "[DONE]":
-                    break
-                chunk = json.loads(payload)
-                if "error" in chunk:
-                    raise OpenRouterError(str(chunk["error"]))
-                if chunk.get("usage"):
-                    result.usage = chunk["usage"]
-                    result.cost = chunk["usage"].get("cost")
-                for choice in chunk.get("choices", []):
-                    delta = (choice.get("delta") or {}).get("content") or ""
-                    if delta:
-                        if result.first_token_ms is None:
-                            result.first_token_ms = int((time.perf_counter() - start) * 1000)
-                        result.text += delta
-                        yield delta, result
-        result.total_ms = int((time.perf_counter() - start) * 1000)
-        yield "", result
 
     async def chat(self, model: str, messages: list[dict], *, max_tokens: int = 700,
                    temperature: float = 0.2, json_mode: bool = False,
@@ -160,6 +98,7 @@ class OpenRouter:
         """Обычный (не потоковый) запрос — для служебных задач."""
         if not self.configured:
             raise OpenRouterError("Не задан ключ OpenRouter")
+        resp = None
         for attempt in range(2):
             body = self._body(model, messages, max_tokens=max_tokens, temperature=temperature,
                               session_id=None, reasoning=reasoning, stream=False, json_mode=json_mode)
@@ -171,6 +110,7 @@ class OpenRouter:
             if attempt == 0 and resp.status_code == 400 and self._learn_reasoning(model, resp.text):
                 continue
             break
+        assert resp is not None
         if resp.status_code != 200:
             raise OpenRouterError(f"{resp.status_code}: {resp.text[:500]}")
         data = resp.json()
