@@ -16,6 +16,11 @@ from . import devices
 from .engine import Phrase, TranslatorEngine
 from .voices import ENROLL_TEXT, MyVoice, Player, has_reference, record_reference
 
+WINDOWS = sys.platform == "win32"
+UNSUPPORTED = ("Эксперимент «переводчик звонка» работает только в Linux: он создаёт виртуальные "
+               "устройства PipeWire, в которые звонок смотрит как в микрофон и колонки. В Windows "
+               "таких устройств без отдельного драйвера (VB-CABLE и подобных) не сделать.")
+
 
 def _fmt(p: Phrase) -> str:
     if p.direction == "in":
@@ -111,6 +116,9 @@ async def run() -> int:
 
 
 def main(action: str, text: str = "") -> int:
+    if WINDOWS:
+        print(UNSUPPORTED, file=sys.stderr)
+        return 1
     if action == "enroll":
         return enroll()
     if action == "say":
@@ -121,3 +129,4 @@ def main(action: str, text: str = "") -> int:
         except KeyboardInterrupt:
             return 0
     return 1
+

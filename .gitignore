@@ -5,8 +5,14 @@ result
 *.egg-info/
 build/
 .venv/
+venv/
 .pytest_cache/
-# личное — живёт в ~/.config/sotto и ~/.local/share/sotto, но на всякий случай
+.pytest_tmp/
+.pytmp/
+.tp*/
+.pr/
+pytest-cache-files-*/
+# личное — живёт в ~/.config/sotto и ~/.local/share/sotto (%APPDATA%\sotto в Windows)
 config.toml
 profile.md
 vacancy.txt

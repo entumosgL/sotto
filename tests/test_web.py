@@ -5,14 +5,14 @@ import time
 from fastapi.testclient import TestClient
 
 from sotto import config as config_mod
-from sotto.bootstrap import Sotto
-from sotto.interfaces.web.app import build_app
+from sotto.daemon import Daemon
+from sotto.web.app import build_app
 
 
-def make_client(**kw):
+def make_client():
     cfg = config_mod.Config()
     cfg.recording.enabled = False
-    d = Sotto(cfg, with_overlay=False, with_desktop=False, **kw)
+    d = Daemon(cfg, with_overlay=False, with_desktop=False)
     return d, TestClient(build_app(d), base_url=f"http://127.0.0.1:{cfg.web.port}")
 
 
@@ -38,7 +38,7 @@ def test_forms(isolated_dirs):
     c.post("/profile", data={"text": "# Иван\nGo-разработчик"})
     assert "Go-разработчик" in c.get("/profile").text
     c.post("/legend/add", data={"claim": "Вёл миграцию на Kafka", "note": ""})
-    assert d.legend.for_call(None)[0].claim == "Вёл миграцию на Kafka"
+    assert d.db.active_legend()[0]["claim"] == "Вёл миграцию на Kafka"
     c.post("/settings", data={"answer.mode": "auto", "openrouter.api_key": "",
                               "_checkboxes": "answer.allow_invention"})
     assert d.cfg.answer.mode == "auto" and d.cfg.answer.allow_invention is False
@@ -48,7 +48,7 @@ def test_forms(isolated_dirs):
 
 
 def test_letter_substitution(isolated_dirs):
-    from sotto.domain.jobs import letter_for
+    from sotto.jobs.resume import letter_for
     cluster = {"letter_md": "{greeting}! Хочу на позицию {position} в {company}."}
     assert letter_for({"title": "Go dev", "company": "Ozon"}, cluster) == "Здравствуйте! Хочу на позицию Go dev в Ozon."
     assert letter_for({"letter_override": "своё"}, cluster) == "своё"
@@ -65,10 +65,44 @@ def test_foreign_sites_blocked(isolated_dirs):
     assert c.post("/api/ctl/toggle_mode").json()["ok"]
 
 
-def test_settings_cannot_change_base_url(isolated_dirs):
+def test_settings_switch_provider(isolated_dirs):
+    """Провайдер меняется формой настроек: подставляются адрес, модели и режим распознавания речи."""
     d, c = make_client()
-    c.post("/settings", data={"openrouter.base_url": "https://evil.example", "web.port": "1"})
-    assert d.cfg.openrouter.base_url.startswith("https://openrouter.ai") and d.cfg.web.port == 8765
+    c.post("/settings", data={"openrouter.provider": "deepseek", "_checkboxes": ""})
+    assert d.cfg.openrouter.provider == "deepseek"
+    assert d.cfg.openrouter.base_url == "https://api.deepseek.com/v1"
+    assert d.cfg.openrouter.extras is False
+    assert d.cfg.models.answer == "deepseek-chat"
+    assert d.cfg.audio.stt == "local"
+    saved = config_mod.load()
+    assert saved.openrouter.provider == "deepseek" and saved.models.vision == ""
+
+
+def test_settings_can_set_own_endpoint(isolated_dirs):
+    """Свой OpenAI-совместимый сервер: адрес вводится руками, но разделы вне настроек — нет."""
+    d, c = make_client()
+    c.post("/settings", data={"openrouter.provider": "custom",
+                              "openrouter.base_url": "http://127.0.0.1:1234/v1",
+                              "models.answer": "qwen2.5:14b",
+                              "_checkboxes": ""})
+    assert d.cfg.openrouter.base_url == "http://127.0.0.1:1234/v1"
+    assert d.cfg.models.answer == "qwen2.5:14b"
+    assert d.cfg.openrouter.extras is False
+    # пустой адрес не затирает уже выбранный (иначе Sotto остался бы без API)
+    c.post("/settings", data={"openrouter.base_url": "", "_checkboxes": ""})
+    assert d.cfg.openrouter.base_url == "http://127.0.0.1:1234/v1"
+    # разделы, которых нет в форме настроек, изменить нельзя
+    c.post("/settings", data={"web.port": "1", "_checkboxes": ""})
+    assert d.cfg.web.port == 8765
+
+
+def test_settings_unknown_provider_ignored(isolated_dirs):
+    d, c = make_client()
+    c.post("/settings", data={"openrouter.provider": "evil", "openrouter.base_url": "https://evil.example",
+                              "_checkboxes": ""})
+    assert d.cfg.openrouter.provider == "openrouter"
+    # адрес панель менять разрешает (свой сервер), но незнакомый провайдер пресет не подменяет
+    assert d.cfg.models.answer == "openai/gpt-6.1-terra"
 
 
 def test_brief_from_trainer_reaches_next_call(isolated_dirs):
@@ -77,5 +111,5 @@ def test_brief_from_trainer_reaches_next_call(isolated_dirs):
     r = c.post("/brief", data={"brief": "Middle Python в Acme"}, follow_redirects=False)
     assert r.status_code == 303
     assert d.db.get_meta("next_call_brief") == "Middle Python в Acme"
-    d.voice.call_started("training")
-    assert d.db.one("SELECT brief FROM calls WHERE id = ?", [d.voice.call_id])["brief"] == "Middle Python в Acme"
+    d.call_started("training")
+    assert d.db.one("SELECT brief FROM calls WHERE id = ?", [d.call_id])["brief"] == "Middle Python в Acme"

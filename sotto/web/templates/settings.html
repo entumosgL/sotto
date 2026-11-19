@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Настройки — Sotto{% endblock %}
+{% block content %}
+<h1>Настройки</h1>
+<p class="muted">Сохраняются в {{ config_path }} и применяются сразу.
+  Автозапуск с системой: <code>sotto autostart on</code>{% if autostart %} — сейчас включён{% endif %}.</p>
+<form method="post" action="/settings">
+<input type="hidden" name="_checkboxes" value="answer.allow_invention,recording.enabled,calls.auto_detect,recording.pause_when_locked">
+
+<div class="card">
+  <b>Провайдер моделей</b>
+  <span class="muted">— OpenRouter, DeepSeek или свой OpenAI-совместимый сервер</span>
+  <label>Кто отвечает на подсказки</label>
+  <select name="openrouter.provider">
+    {% for key, title in providers %}
+    <option value="{{ key }}" {% if c.openrouter.provider == key %}selected{% endif %}>{{ title }}</option>{% endfor %}
+  </select>
+  <p class="muted">{{ preset.note }}</p>
+  <div class="grid">
+    <div><label>Адрес API (base_url)</label>
+      <input type="text" name="openrouter.base_url" value="{{ c.openrouter.base_url }}"></div>
+    <div><label>Ключ (пусто — не менять)</label>
+      <input type="password" name="openrouter.api_key" placeholder="{{ 'ключ задан' if c.api_key else 'sk-…' }}"></div>
+    <div><label>Выбор провайдера внутри модели (только OpenRouter)</label>
+      <select name="openrouter.provider_sort">
+        {% for v, t in [("latency","по задержке (для подсказок)"),("throughput","по скорости генерации"),("price","по цене")] %}
+        <option value="{{ v }}" {% if c.openrouter.provider_sort == v %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select></div>
+  </div>
+  <p class="muted">
+    Сейчас: <b>{{ provider_name }}</b> · {{ c.openrouter.base_url }}
+    {% if not c.provider.cloud_stt %}· распознавание речи — локальное (у этого провайдера его нет){% endif %}
+    {% if not c.models.vision %}· подсказки по скриншоту выключены (нет модели со зрением){% endif %}
+  </p>
+  <p><button type="button" onclick="sottoTestProvider(this)">Проверить ключ и адрес</button>
+     <span id="provider-test-result" class="muted"></span></p>
+  <script>
+  // При смене провайдера подставляем его адрес — иначе поле осталось бы от прошлого.
+  var SOTTO_PROVIDER_BASE_URLS = {{ provider_bases|tojson }};
+  var providerSelect = document.querySelector('select[name="openrouter.provider"]');
+  if (providerSelect) {
+    providerSelect.addEventListener('change', function () {
+      var url = SOTTO_PROVIDER_BASE_URLS[providerSelect.value];
+      var field = document.querySelector('input[name="openrouter.base_url"]');
+      if (url && field) { field.value = url; }
+    });
+  }
+
+  async function sottoTestProvider(button) {
+    const out = document.getElementById('provider-test-result');
+    out.textContent = 'проверяю…';
+    button.disabled = true;
+    try {
+      const r = await fetch('/api/provider/test', {method: 'POST'});
+      const data = await r.json();
+      out.textContent = data.ok
+        ? `работает: ${data.model} ответил «${data.text}»`
+        : `ошибка: ${data.error}`;
+    } catch (e) {
+      out.textContent = 'ошибка запроса: ' + e;
+    } finally {
+      button.disabled = false;
+    }
+  }
+  </script>
+</div>
+
+<div class="card">
+  <b>Модели</b> <span class="muted">— подобрать по реальным замерам:
+  <code>sotto bench</code> (OpenRouter). Пустое поле «Скриншоты» выключает подсказки по экрану.</span>
+  <div class="grid">
+    {% for key, title in [("answer","Ответ (средней длины)"),("vision","Скриншоты"),("answer_short","Короткий (dual)"),("answer_detailed","Подробный (dual)"),("utility","Служебная (имена)"),("stt","Распознавание речи")] %}
+    <div><label>{{ title }}</label><input type="text" name="models.{{ key }}" value="{{ c.models[key] }}"></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <b>Звук</b> <span class="muted">— раздельные дорожки: микрофон это «я», системный звук это «собеседники»</span>
+  <div class="grid">
+    <div><label>Микрофон</label>
+      <select name="audio.mic">
+        <option value="">по умолчанию</option>
+        {% for dev in devices.microphones %}
+        <option value="{{ dev.id }}" {% if c.audio.mic == dev.id %}selected{% endif %}>{{ dev.name }}</option>{% endfor %}
+      </select>
+      {% if c.audio.mic and c.audio.mic not in devices.microphones|map(attribute='id')|list %}
+      <span class="muted">сейчас: {{ c.audio.mic }}</span>{% endif %}
+    </div>
+    <div><label>Системный звук (голос собеседника)</label>
+      <select name="audio.system">
+        <option value="">все выходы: слушать тот, где играет (рекомендуется)</option>
+        {% for dev in devices.speakers %}
+        <option value="{{ dev.id }}" {% if c.audio.system == dev.id %}selected{% endif %}>{{ dev.name }}</option>{% endfor %}
+      </select>
+      {% if c.audio.system and c.audio.system not in devices.speakers|map(attribute='id')|list %}
+      <span class="muted">сейчас: {{ c.audio.system }}</span>{% endif %}
+      <span class="muted">Discord и Zoom сами выбирают, куда играть, поэтому по умолчанию Sotto слушает
+        loopback всех выходов. Уровень видно на главной странице.</span>
+    </div>
+    <div><label>Распознавание</label>
+      <select name="audio.stt">
+        {% for v, t in [("auto","авто: локальный Whisper на видеокарте, иначе облако"),("local","всегда локально (бесплатно)"),("cloud","всегда OpenRouter")] %}
+        <option value="{{ v }}" {% if c.audio.stt == v %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+    </div>
+    <div><label>Пауза = конец реплики, с</label><input type="number" step="0.1" name="audio.min_silence" value="{{ c.audio.min_silence }}"></div>
+  </div>
+</div>
+
+<div class="card">
+  <b>Подсказки</b>
+  <div class="grid">
+    <div><label>Режим</label><select name="answer.mode">
+      <option value="manual" {% if c.answer.mode == "manual" %}selected{% endif %}>по хоткею</option>
+      <option value="auto" {% if c.answer.mode == "auto" %}selected{% endif %}>авто: отвечать без нажатий</option></select></div>
+    <div><label>Стиль</label><select name="answer.style">
+      <option value="single" {% if c.answer.style == "single" %}selected{% endif %}>один ответ средней длины</option>
+      <option value="dual" {% if c.answer.style == "dual" %}selected{% endif %}>короткий + подробный</option></select></div>
+    <div><label>Контекст, минут разговора</label><input type="number" name="answer.context_minutes" value="{{ c.answer.context_minutes }}"></div>
+    <div><label>Пауза перед авто-ответом, мс</label><input type="number" name="answer.auto_pause_ms" value="{{ c.answer.auto_pause_ms }}"></div>
+  </div>
+  <label class="check"><input type="checkbox" name="answer.allow_invention" value="1" {% if c.answer.allow_invention %}checked{% endif %}> Разрешить придумывать опыт (всё придуманное попадает в «Легенду»)</label>
+</div>
+
+<div class="card">
+  <b>Запись и звонки</b>
+  <label class="check"><input type="checkbox" name="recording.enabled" value="1" {% if c.recording.enabled %}checked{% endif %}> Постоянная запись экрана</label>
+  <label class="check"><input type="checkbox" name="recording.pause_when_locked" value="1" {% if c.recording.pause_when_locked %}checked{% endif %}> Пауза при блокировке экрана</label>
+  <div class="grid">
+    <div><label>Кадров/с вне звонка</label><input type="number" name="recording.fps_idle" value="{{ c.recording.fps_idle }}"></div>
+    <div><label>Кадров/с в звонке</label><input type="number" name="recording.fps_call" value="{{ c.recording.fps_call }}"></div>
+  </div>
+  <label class="check"><input type="checkbox" name="calls.auto_detect" value="1" {% if c.calls.auto_detect %}checked{% endif %}> Определять звонок автоматически (приложение взяло микрофон)</label>
+  <label>Не считать звонком (по одному на строку)</label>
+  <textarea name="calls.ignore_apps" style="min-height:80px">{{ c.calls.ignore_apps|join("\n") }}</textarea>
+</div>
+
+<div class="card">
+  <b>Агенты для фоновых задач</b>
+  <label>Порядок (по одному на строку)</label>
+  <textarea name="agents.order" style="min-height:120px">{{ c.agents.order|join("\n") }}</textarea>
+  <p>{% for a in agents %}<span class="pill {{ 'ok' if a.installed else 'bad' }}">{{ a.name }}{% if not a.installed %} — не найден{% endif %}{% if a.cooling_until %} — лимит до {{ a.cooling_until|dt }}{% endif %}</span> {% endfor %}</p>
+</div>
+
+<p><button>Сохранить</button></p>
+</form>
+
+<div class="card">
+  <b>Хоткеи</b> <span class="muted">(регистрируются при запуске демона; менять — в config.toml, раздел [hotkeys])</span>
+  <table>
+    {% for action, title in [("ask","Подсказать ответ"),("screen","Ответ по скриншоту экрана"),("screen_region","Ответ по выделенной области"),("questions","Вопросы собеседнику"),("toggle_mode","Авто / по хоткею"),("toggle_overlay","Скрыть / показать оверлей"),("toggle_call","Начать / закончить звонок вручную"),("scroll_up","Прокрутить ответ вверх"),("scroll_down","Прокрутить ответ вниз"),("clear","Очистить оверлей")] %}
+    <tr><td><code>{{ c.hotkeys[action] }}</code></td><td>{{ title }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

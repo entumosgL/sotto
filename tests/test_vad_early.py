@@ -3,11 +3,11 @@
 import numpy as np
 import pytest
 
-from sotto.infrastructure.audio import CHUNK, SAMPLE_RATE
+from sotto.audio.capture import CHUNK, SAMPLE_RATE
 
 
 def speech(text):
-    from sotto.infrastructure.audio import tts
+    from sotto.audio import tts
     s, sr = tts.synthesize(text, "en_US-lessac-medium")
     n = int(len(s) * SAMPLE_RATE / sr)
     x = np.interp(np.linspace(0, len(s), n, endpoint=False), np.arange(len(s)), s).astype(np.float32)
@@ -16,7 +16,7 @@ def speech(text):
 
 
 def run(audio):
-    from sotto.infrastructure.audio.vad import ChannelVAD
+    from sotto.audio.vad import ChannelVAD
     vad = ChannelVAD("them", early_silence=0.2)
     log = []
     for i in range(0, len(audio) - CHUNK + 1, CHUNK):

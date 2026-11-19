@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from collections import deque
 
-from ...application.prompting import render
-from ...infrastructure.llm.openrouter import OpenRouter
-from ...infrastructure.prompts import prompts
+from ...copilot import prompts
+from ...openrouter import OpenRouter
 
 LANG = {"ru": "русский", "en": "английский", "de": "немецкий", "es": "испанский", "fr": "французский"}
 
@@ -41,8 +40,8 @@ class Translator:
 
     def _system(self, direction: str) -> str:
         if direction == "in":
-            return render(TO_ME, src=LANG.get(self.their, self.their), dst=LANG.get(self.mine, self.mine))
-        return render(FROM_ME, src=LANG.get(self.mine, self.mine), dst=LANG.get(self.their, self.their),
+            return prompts.render(TO_ME, src=LANG.get(self.their, self.their), dst=LANG.get(self.mine, self.mine))
+        return prompts.render(FROM_ME, src=LANG.get(self.mine, self.mine), dst=LANG.get(self.their, self.their),
                               profile=prompts.profile()[:3000] or "(нет)")
 
     async def translate(self, direction: str, text: str, who: str) -> tuple[str, int | None]:

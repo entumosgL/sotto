@@ -12,16 +12,16 @@ import asyncio
 import logging
 import subprocess
 import time
-from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 
+from ...audio.capture import Stream
+from ...audio.speakers import Embedder, VoiceRegistry
+from ...audio.vad import ChannelVAD, Segment
 from ...config import Config
-from ...infrastructure.audio.speakers import Embedder, VoiceRegistry
-from ...infrastructure.audio.vad import ChannelVAD, Segment
-from ...infrastructure.llm.openrouter import OpenRouter
-from ...infrastructure.platform.linux.pipewire import Stream
+from ...openrouter import OpenRouter
 from . import devices
 from .translate import Translator
 from .voices import MyVoice, Player, TheirVoices
@@ -107,7 +107,7 @@ class TranslatorEngine:
     async def _transcribe(self, p: Phrase) -> str:
         lang = self.cfg.translator.their_language if p.direction == "in" else self.cfg.translator.my_language
         mode = self.cfg.translator.stt
-        from ...infrastructure.audio import local_stt
+        from ...audio import local_stt
         if mode == "auto" and local_stt.has_cuda() or mode.startswith("local") or not self.llm.configured:
             text, _ = await asyncio.to_thread(local_stt.transcribe, p.seg.samples, "auto", lang)
         else:

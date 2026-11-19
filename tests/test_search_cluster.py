@@ -4,10 +4,9 @@ import time
 
 import numpy as np
 
-from sotto.application.jobs.cluster import update_clusters
-from sotto.infrastructure.search import Search
-from sotto.infrastructure.sqlite.db import DB
-from sotto.infrastructure.sqlite.jobs import JobsStore
+from sotto.db import DB
+from sotto.jobs.cluster import update_clusters
+from sotto.search import Search
 
 TOPICS = {"kafka": 0, "postgres": 1, "frontend": 2, "react": 2, "go": 3, "golang": 3}
 
@@ -54,11 +53,11 @@ async def test_clusters(isolated_dirs):
     for i, text in enumerate(["Go разработчик, golang, kafka", "Golang backend, go, kafka",
                               "React frontend developer", "Frontend на react", "Повар в ресторан"]):
         db.insert("vacancies", source="telegram", source_ref=str(i), title=text, text=text, found_at=time.time())
-    res = await update_clusters(JobsStore(db), s, FakeAgents())
+    res = await update_clusters(db, s, FakeAgents())
     assert res["created"] == 2
     go = db.all("SELECT cluster_id FROM vacancies WHERE source_ref IN ('0', '1')")
     assert go[0]["cluster_id"] == go[1]["cluster_id"] is not None
     assert db.one("SELECT cluster_id FROM vacancies WHERE source_ref = '4'")["cluster_id"] is None
     db.insert("vacancies", source="telegram", source_ref="5", title="Senior golang go", text="go golang", found_at=time.time())
-    res2 = await update_clusters(JobsStore(db), s, FakeAgents())
+    res2 = await update_clusters(db, s, FakeAgents())
     assert res2["assigned"] == 1

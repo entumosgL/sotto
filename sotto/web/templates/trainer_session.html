@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Тренировка — Sotto{% endblock %}
+{% block content %}
+<h1>{{ s.topic }}</h1>
+<p class="muted">{{ "Знания" if s.kind == "knowledge" else "Английский" }} · {{ s.started_at|dt }}</p>
+<div class="card">
+  {% for t in turns %}
+  <div class="utt {{ 'me' if t.role == 'user' else '' }}"><span class="who">{{ "Ты" if t.role == "user" else "Тренер" }}:</span> {{ t.text }}
+    {% if t.feedback %}<div class="card answer">{{ t.feedback|md|safe }}</div>{% endif %}</div>
+  {% endfor %}
+</div>
+{% endblock %}

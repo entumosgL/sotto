@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tomllib
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from pathlib import Path
@@ -19,35 +20,116 @@ from . import paths
 class OpenRouter:
     # Ключ можно не хранить в файле, а задать переменной OPENROUTER_API_KEY.
     api_key: str = ""
+    # Кто отвечает: openrouter | deepseek | custom (см. PROVIDERS ниже). От этого зависят
+    # значения по умолчанию и то, какие поля кладутся в тело запроса.
+    provider: str = "openrouter"
     base_url: str = "https://openrouter.ai/api/v1"
-    # Сортировка провайдеров внутри модели: "latency" | "throughput" | "price".
+    # OpenRouter-специфичные поля (выбор провайдера, учёт расхода, выключение «размышлений»,
+    # session_id). У DeepSeek и прочих OpenAI-совместимых серверов их нужно выключать.
+    extras: bool = True
+    # Сортировка провайдеров внутри модели (только OpenRouter): "latency" | "throughput" | "price".
     provider_sort: str = "latency"
 
 
 @dataclass
-class DeepSeek:
-    # platform.deepseek.com → API Keys; или переменная DEEPSEEK_API_KEY.
-    api_key: str = ""
-    base_url: str = "https://api.deepseek.com/v1"
+class ProviderPreset:
+    """Ключ → адрес, поля запроса, модели и режим распознавания речи для конкретного провайдера."""
+
+    title: str
+    base_url: str
+    extras: bool
+    stt: str                      # [audio].stt: auto | local | cloud
+    models: dict[str, str] = field(default_factory=dict)
+    note: str = ""
+
+    @property
+    def cloud_stt(self) -> bool:
+        """Есть ли у провайдера распознавание речи в облаке (/audio/transcriptions)."""
+        return self.stt != "local"
 
 
-@dataclass
-class Providers:
-    """Прямые провайдеры моделей. Модель вида «deepseek/deepseek-chat» при заданном ключе идёт напрямую
-    (дешевле и без прослойки), без ключа — через OpenRouter, где тот же идентификатор тоже работает."""
-    deepseek: DeepSeek = field(default_factory=DeepSeek)
+PROVIDERS: dict[str, ProviderPreset] = {
+    "openrouter": ProviderPreset(
+        title="OpenRouter — один ключ на всё: подсказки, распознавание речи, скриншоты",
+        base_url="https://openrouter.ai/api/v1",
+        extras=True,
+        stt="auto",
+        models={
+            "answer": "openai/gpt-6.1-terra",
+            "answer_fallback": "deepseek/deepseek-v4.1-flash",
+            "answer_short": "anthropic/claude-haiku-5.5",
+            "answer_detailed": "anthropic/claude-sonnet-5.5",
+            "vision": "anthropic/claude-sonnet-5.5",
+            "utility": "anthropic/claude-haiku-5.5",
+            "stt": "openai/whisper-large-v3-turbo",
+        },
+        note="Ключ: openrouter.ai/keys. Баланс один на подсказки и расшифровку.",
+    ),
+    "deepseek": ProviderPreset(
+        title="DeepSeek — свой ключ; подсказки, распознавание речи локальное",
+        base_url="https://api.deepseek.com/v1",
+        extras=False,
+        stt="local",
+        models={
+            "answer": "deepseek-chat",
+            "answer_fallback": "deepseek-chat",
+            "answer_short": "deepseek-chat",
+            "answer_detailed": "deepseek-chat",   # deepseek-reasoner — точнее, но думает дольше
+            "vision": "",           # в DeepSeek API нет моделей со зрением
+            "utility": "deepseek-chat",
+            "stt": "",              # облачного распознавания у DeepSeek нет
+        },
+        note="Ключ: platform.deepseek.com. Речь распознаётся локально на этой машине, "
+             "подсказки по скриншоту недоступны (нет модели со зрением). "
+             "Для режима «короткий + подробный» можно взять deepseek-reasoner.",
+    ),
+    "custom": ProviderPreset(
+        title="Свой OpenAI-совместимый сервер — LM Studio, vLLM, ollama, прокси…",
+        base_url="http://127.0.0.1:1234/v1",
+        extras=False,
+        stt="local",
+        models={},
+        note="Имена моделей впиши вручную в разделе «Модели». Ключ нужен не всем серверам — "
+             "можно оставить пустым и задать любой в OPENROUTER_API_KEY.",
+    ),
+}
+
+
+def provider_options() -> list[tuple[str, str]]:
+    """[(ключ, название)] — для панели и мастера настройки."""
+    return [(key, preset.title) for key, preset in PROVIDERS.items()]
+
+
+def apply_provider(cfg: "Config", name: str) -> bool:
+    """Переключить провайдера: адрес, поля запроса, модели и режим распознавания речи.
+    Правки пользователя в моделях для «своего сервера» не трогаем."""
+    preset = PROVIDERS.get(name)
+    if preset is None:
+        return False
+    cfg.openrouter.provider = name
+    cfg.openrouter.base_url = preset.base_url
+    cfg.openrouter.extras = preset.extras
+    cfg.audio.stt = preset.stt
+    for role, model in preset.models.items():
+        if hasattr(cfg.models, role):
+            setattr(cfg.models, role, model)
+    return True
+
+
+def provider_preset(name: str) -> ProviderPreset:
+    return PROVIDERS.get(name) or PROVIDERS["openrouter"]
 
 
 @dataclass
 class Models:
-    """Модели OpenRouter по ролям. `sotto bench` подбирает их по реальным замерам."""
+    """Модели по ролям. `sotto bench` подбирает их по реальным замерам (OpenRouter)."""
     # Подсказка. Выбрана слепым тестом на реальном собеседовании (оценивал живой интервьюер):
     # GPT-6.1 terra — больше всего «лучших» и меньше всего «не принял бы»; ~0.9 с до первых слов, ~$0.003.
     answer: str = "openai/gpt-6.1-terra"
     answer_fallback: str = "deepseek/deepseek-v4.1-flash"  # если основная упёрлась в лимит или упала
     answer_short: str = "anthropic/claude-haiku-5.5"    # режим dual: короткая подсказка
     answer_detailed: str = "anthropic/claude-sonnet-5.5"  # режим dual: подробный ответ
-    vision: str = "anthropic/claude-sonnet-5.5"         # ответы по скриншоту — нужна сильная модель
+    vision: str = "anthropic/claude-sonnet-5.5"         # ответы по скриншоту; пусто — модель без зрения
     utility: str = "anthropic/claude-haiku-5.5"         # мелочи: имена из представлений, брифы
     stt: str = "openai/whisper-large-v3-turbo"          # распознавание реплик; "local:auto" — бесплатно на своей видеокарте
 
@@ -61,15 +143,15 @@ class Answer:
     auto_pause_ms: int = 0        # доп. пауза после реплики собеседника перед авто-ответом (VAD уже ждёт 0.5 с тишины)
     early: bool = True  # упреждение: подсказка начинает писаться через 0.2 с паузы собеседника (скрыто), ~1 с быстрее
     max_tokens: int = 350
-    # Подсказка на неродном языке (родной берётся из профиля) обрезается до стольких слов
-    # в коде, даже если модель не уложилась: кандидат читает её вслух. 0 — не обрезать.
-    nonnative_word_limit: int = 25
 
 
 @dataclass
 class Audio:
-    mic: str = ""      # node.name источника PipeWire; пусто — источник по умолчанию
-    system: str = ""   # node.name выхода, чей монитор пишем (голос собеседника); пусто — выход по умолчанию
+    mic: str = ""      # микрофон: node.name в PipeWire, id/имя устройства в WASAPI; пусто — по умолчанию
+    # Системный звук (голос собеседника). Пусто — Windows: слушаем loopback ВСЕХ устройств вывода
+    # и берём то, где играет (Discord и Zoom выбирают устройство сами); Linux — выход по умолчанию.
+    # Указано устройство — слушаем только его.
+    system: str = ""
     min_silence: float = 0.5               # секунд тишины = конец реплики
     max_utterance: float = 25.0            # длинные монологи режем на куски
     speaker_threshold: float = 0.6         # косинусная близость голоса «это тот же человек»
@@ -83,35 +165,44 @@ class Recording:
     enabled: bool = True
     fps_idle: int = 2            # вне звонка: экран почти статичен, 2 кадра/с хватает
     fps_call: int = 5
-    codec: str = "auto"          # auto | hevc_vaapi | libx265
+    # auto | libx265 (оба), hevc_vaapi (Linux, встройка), hevc_nvenc / hevc_qsv / hevc_amf (Windows)
+    codec: str = "auto"
     vaapi_device: str = "/dev/dri/renderD128"
-    output: str = ""             # монитор; пусто — основной
+    output: str = ""             # монитор: имя в Hyprland или номер в Windows; пусто — основной
     segment_minutes: int = 30    # файлы режутся на куски, чтобы сбой не терял всё
     pause_when_locked: bool = True
+
+
+# Программы, которые держат микрофон постоянно и звонком не являются.
+_IGNORE_LINUX = ["easyeffects", "noisetorch", "pw-record", "pw-cat", "sotto", "python3", "obs",
+                 "wireplumber", "pipewire"]
+_IGNORE_WINDOWS = ["sotto", "python", "pythonw", "ffmpeg", "obs", "audiodg", "nvcontainer",
+                   "nvidia broadcast", "steamwebhelper", "voiceaccess", "cortana"]
 
 
 @dataclass
 class Calls:
     auto_detect: bool = True
-    # Программы, которые держат микрофон постоянно и звонком не являются.
-    ignore_apps: list[str] = field(default_factory=lambda: [
-        "easyeffects", "noisetorch", "pw-record", "pw-cat", "sotto", "python3", "obs",
-        "wireplumber", "pipewire",
-    ])
+    ignore_apps: list[str] = field(
+        default_factory=lambda: list(_IGNORE_WINDOWS if sys.platform == "win32" else _IGNORE_LINUX))
     start_after_s: int = 4
     end_after_s: int = 20
 
 
 @dataclass
 class Hotkeys:
-    """Хоткеи регистрируются в Hyprland на лету при запуске демона. Пусто — не назначен
-    (действие остаётся в панели и в `sotto ctl`)."""
-    ask: str = "SUPER + A"                    # ответить сейчас, не дожидаясь паузы
-    screen: str = "SUPER + X"                 # подсказка по скриншоту экрана
-    screen_region: str = "SUPER + SHIFT + X"  # … по выделенной области
-    questions: str = "SUPER + SHIFT + A"      # какие вопросы задать собеседнику
-    toggle_overlay: str = "SUPER + H"         # спрятать/показать оверлей
-    overlay_edit: str = "SUPER + SHIFT + O"   # передвинуть/растянуть оверлей (иначе он прозрачен для мыши)
+    """Хоткеи регистрируются при запуске демона: в Windows — глобальные (RegisterHotKey),
+    в Linux — в Hyprland. Пусто — не назначен (действие остаётся в панели и в `sotto ctl`).
+
+    В Windows по умолчанию Ctrl+Alt: SUPER+A, SUPER+X и SUPER+H заняты самой Windows 11
+    (панель быстрых настроек, меню Win+X, голосовой ввод) — RegisterHotKey их не отдаёт."""
+
+    ask: str = "CTRL + ALT + A" if sys.platform == "win32" else "SUPER + A"  # ответить сейчас
+    screen: str = "CTRL + ALT + X" if sys.platform == "win32" else "SUPER + X"  # по скриншоту
+    screen_region: str = ("CTRL + ALT + SHIFT + X" if sys.platform == "win32"
+                          else "SUPER + SHIFT + X")  # … по выделенной области
+    questions: str = "CTRL + ALT + Q" if sys.platform == "win32" else "SUPER + SHIFT + A"
+    toggle_overlay: str = "CTRL + ALT + H" if sys.platform == "win32" else "SUPER + H"
     toggle_mode: str = ""
     toggle_call: str = ""
     scroll_up: str = ""
@@ -215,7 +306,6 @@ class Web:
 @dataclass
 class Config:
     openrouter: OpenRouter = field(default_factory=OpenRouter)
-    providers: Providers = field(default_factory=Providers)
     models: Models = field(default_factory=Models)
     answer: Answer = field(default_factory=Answer)
     audio: Audio = field(default_factory=Audio)
@@ -234,8 +324,20 @@ class Config:
     def api_key(self) -> str:
         return os.environ.get("OPENROUTER_API_KEY") or self.openrouter.api_key
 
-    def deepseek_api_key(self) -> str:
-        return os.environ.get("DEEPSEEK_API_KEY") or self.providers.deepseek.api_key
+    @property
+    def provider(self) -> ProviderPreset:
+        """Пресет выбранного провайдера (адрес, поля запроса, что он умеет)."""
+        return provider_preset(self.openrouter.provider)
+
+    @property
+    def provider_name(self) -> str:
+        """Как называть провайдера человеку: «OpenRouter», «DeepSeek», «свой сервер»."""
+        return self.provider.title.split(" — ")[0].split(" (")[0]
+
+    @property
+    def requires_key(self) -> bool:
+        """Нужен ли ключ: своему локальному серверу — обычно нет."""
+        return self.openrouter.provider != "custom"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -258,7 +360,7 @@ def load(path: Path | None = None) -> Config:
     path = path or paths.CONFIG_FILE
     cfg = Config()
     if path.exists():
-        _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8")))
+        _merge(cfg, tomllib.loads(path.read_text(encoding="utf-8-sig")))
     return cfg
 
 

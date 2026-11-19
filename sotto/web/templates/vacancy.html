@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ v.title or "Вакансия" }} — Sotto{% endblock %}
+{% block content %}
+<p><a href="/jobs">← Вакансии</a></p>
+<h1>{{ v.title or "Без названия" }}{% if v.company %} · {{ v.company }}{% endif %}</h1>
+<p class="muted">{{ v.source }} · {{ v.found_at|dt }}{% if v.url %} · <a href="{{ v.url }}" target="_blank" rel="noopener">оригинал</a>{% endif %}
+  {% if v.salary %} · {{ v.salary }}{% endif %}{% if v.location %} · {{ v.location }}{% endif %}</p>
+
+<div class="row card">
+  <form method="post" action="/jobs/{{ v.id }}/status" class="row">
+    <select name="status">{% for s, t in [("new","новая"),("ready","готова к отклику"),("sent","отправлено"),("replied","ответили"),("hidden","скрыть")] %}<option value="{{ s }}" {% if v.status == s %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+    <button class="secondary">Статус</button>
+  </form>
+  <form method="post" action="/jobs/{{ v.id }}/cluster" class="row">
+    <select name="cluster_id"><option value="">— без кластера —</option>{% for c in clusters %}<option value="{{ c.id }}" {% if v.cluster_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+    <button class="secondary">Кластер</button>
+  </form>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <b>Текст вакансии</b>
+    {% if v.summary %}<p><i>{{ v.summary }}</i></p>{% endif %}
+    <div style="white-space:pre-wrap;max-height:520px;overflow:auto">{{ v.text }}</div>
+  </div>
+  <div class="card">
+    <b>Отклик</b>
+    {% if not cluster or not cluster.letter_md %}<p class="muted">У кластера ещё нет письма и резюме — сгенерируй их в разделе <a href="/resume">Резюме</a> (или напиши здесь руками).</p>{% endif %}
+    <form method="post" action="/jobs/{{ v.id }}/override">
+      <label>Письмо {% if v.letter_override %}<span class="pill">правка под эту вакансию</span>{% else %}<span class="pill">шаблон кластера</span>{% endif %}</label>
+      <textarea name="letter" style="min-height:200px">{{ letter }}</textarea>
+      <details><summary class="muted">Резюме {% if v.resume_override %}(правка под эту вакансию){% else %}(вариант кластера){% endif %}</summary>
+        <textarea name="resume_md" style="min-height:300px">{{ resume_md }}</textarea></details>
+      <p class="row"><button class="secondary">Сохранить правки</button> <a class="button" style="background:transparent;color:var(--accent)" href="/jobs/{{ v.id }}/resume.pdf" target="_blank">PDF</a></p>
+    </form>
+
+    <b>Отправить</b> <span class="muted">— только по кнопке, с лимитами против бана</span>
+    {% for c in v.contacts_list %}
+    <form method="post" action="/jobs/{{ v.id }}/send" class="row" style="margin-top:6px" onsubmit="return confirm('Отправить отклик: {{ c.value }}?')">
+      <input type="hidden" name="channel" value="{{ c.type }}"><input type="hidden" name="target" value="{{ c.value }}">
+      <span>{{ {"telegram": "Telegram", "email": "Почта", "linkedin": "LinkedIn", "url": "Ссылка"}[c.type] }}: {{ c.value }}</span>
+      <button>{{ "Открыть и скопировать текст" if c.type in ("linkedin", "url") else "Отправить" }}</button>
+    </form>
+    {% else %}
+      {% if v.url %}
+      <form method="post" action="/jobs/{{ v.id }}/send" class="row" style="margin-top:6px">
+        <input type="hidden" name="channel" value="url"><input type="hidden" name="target" value="{{ v.url }}">
+        <span class="muted">Контактов в тексте нет — откликнуться на странице</span><button>Открыть и скопировать текст</button>
+      </form>
+      {% else %}<p class="muted">Контактов не найдено.</p>{% endif %}
+    {% endfor %}
+
+    {% if sent %}<p class="muted" style="margin-top:10px">{% for s in sent %}{{ s.sent_at|dt }} · {{ s.channel }} · {{ s.target }} · {{ s.status }}<br>{% endfor %}</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

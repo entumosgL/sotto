@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Легенда — Sotto{% endblock %}
+{% block content %}
+<h1>Легенда</h1>
+<p class="muted">Всё, что суфлёр придумал о твоём опыте (в подсказках выделено цветом). Придуманное держится в пределах одной компании: на следующем этапе с ней суфлёр не будет себе противоречить, а в другие компании и на тренировки оно не попадает. Когда процесс с компанией закрыт (отказ, ты отказался, отменено) — её легенда удаляется сама; из звонков, где компания не определилась, — через сутки.</p>
+
+<div class="card">
+  <details><summary><b>Добавить вручную</b></summary>
+  <form method="post" action="/legend/add">
+    <label>Утверждение</label><input type="text" name="claim" placeholder="В 2024 вёл миграцию платёжного сервиса на Kafka (команда 4 человека)">
+    <label>Детали</label><input type="text" name="note" placeholder="Подробности, которые стоит помнить">
+    <label>Компания (пусто — для всех собеседований)</label><input type="text" name="company" placeholder="например: Acme">
+    <p><button>Добавить</button></p>
+  </form></details>
+</div>
+
+{% for group, items in groups.items() %}
+<h2>{{ group }} <span class="muted">· {{ items|length }}</span></h2>
+{% if items[0].company %}<form method="post" action="/legend/company/delete" class="inline"><input type="hidden" name="company" value="{{ items[0].company }}"><button class="danger" style="padding:0 8px;font-size:13px">удалить всё по компании</button></form>{% endif %}
+{% for i in items %}
+<div class="card" {% if not i.active %}style="opacity:.6"{% endif %}>
+  <form method="post" action="/legend/{{ i.id }}">
+    <input type="text" name="claim" value="{{ i.claim }}">
+    <label>Уточнение / детали</label><input type="text" name="note" value="{{ i.note or '' }}">
+    <div class="row" style="margin-top:8px">
+      <label class="check"><input type="checkbox" name="active" value="1" {% if i.active %}checked{% endif %}> использовать в ответах</label>
+      <span class="muted">{{ i.created_at|dt }}{% if i.call_id %} · <a href="/calls/{{ i.call_id }}">{{ i.call_title or "звонок #" ~ i.call_id }}</a>{% endif %}</span>
+      <button class="secondary">Сохранить</button>
+    </div>
+  </form>
+  <form method="post" action="/legend/{{ i.id }}/delete" class="inline"><button class="danger" style="margin-top:6px">Удалить</button></form>
+</div>
+{% endfor %}
+{% else %}
+<p class="muted">Пока ничего не придумано.</p>
+{% endfor %}
+{% endblock %}

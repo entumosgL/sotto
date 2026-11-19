@@ -1,0 +1,58 @@
+:root {
+  --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e3de;
+  --accent: #3b5bdb; --accent-soft: #e7ecff; --danger: #c92a2a; --ok: #2b8a3e; --legend: #9c36b5;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151514; --panel: #1e1e1c; --text: #e8e8e4; --muted: #9a9a93; --line: #2e2e2b;
+          --accent: #7c93f0; --accent-soft: #252c47; --danger: #ff6b6b; --ok: #69db7c; --legend: #da77f2; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+header { display: flex; gap: 16px; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--line);
+         background: var(--panel); position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
+header .brand { font-weight: 700; margin-right: 8px; }
+header nav { display: flex; gap: 14px; flex-wrap: wrap; }
+header .live { margin-left: auto; color: var(--muted); font-size: 13px; display: flex; gap: 10px; }
+main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font-size: 22px; margin: 4px 0 16px; }
+h2 { font-size: 17px; margin: 24px 0 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.muted { color: var(--muted); font-size: 13px; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); font-size: 12px; }
+.pill.ok { color: var(--ok); } .pill.bad { color: var(--danger); }
+table { width: 100%; border-collapse: collapse; }
+td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 13px; color: var(--muted); }
+input[type=text], input[type=password], input[type=number], input[type=search], input[type=datetime-local], textarea, select {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg);
+  color: var(--text); font: inherit; }
+textarea { min-height: 120px; font-family: ui-monospace, monospace; font-size: 13px; }
+button, .button { padding: 7px 14px; text-decoration: none !important; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent);
+  color: white; font: inherit; cursor: pointer; display: inline-block; }
+button.secondary { background: transparent; color: var(--accent); }
+button.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+form.inline { display: inline; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row > * { flex: 1; }
+.row > button, .row > form { flex: 0 0 auto; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+label.check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 15px; }
+.utt { padding: 4px 0; }
+.utt .who { font-weight: 600; }
+.utt.me .who { color: var(--accent); }
+.legend-mark { color: var(--legend); border-bottom: 1px dashed var(--legend); }
+pre, code { font-family: ui-monospace, monospace; font-size: 13px; }
+pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow-x: auto; }
+.answer { border-left: 3px solid var(--accent); padding-left: 10px; margin: 8px 0; }
+.toast { position: fixed; bottom: 16px; right: 16px; background: var(--panel); border: 1px solid var(--line);
+  padding: 10px 14px; border-radius: 8px; max-width: 420px; display: none; }
+/* Уровень звука: сразу видно, слышит ли суфлёр микрофон и собеседников */
+.levels { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 4px; }
+.levels .lvl { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.levels .bar { display: inline-block; width: 140px; height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.levels .bar b { display: block; height: 100%; width: 0; background: var(--ok); transition: width 80ms linear; }
+.levels .bar b.hot { background: var(--accent); }
+@media (max-width: 640px) { header .live { margin-left: 0; } }

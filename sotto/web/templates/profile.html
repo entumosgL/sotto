@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Профиль — Sotto{% endblock %}
+{% block content %}
+<h1>Профиль</h1>
+<p class="muted">На этом тексте строятся все подсказки, тренеры и резюме. Пиши как есть: роль, стек, места работы, проекты, цифры. Файл: {{ paths.short(paths.PROFILE_FILE) }}</p>
+<div class="card">
+  <form method="post" action="/profile">
+    <textarea name="text" style="min-height:420px">{{ profile }}</textarea>
+    <p><button>Сохранить</button></p>
+  </form>
+</div>
+<div class="card">
+  <b>Набросать черновик агентом</b>
+  <p class="muted">Вставь заметки в свободной форме (или старое резюме) — агент разложит их по разделам и допишет в профиль. Ничего не придумывает.</p>
+  <form method="post" action="/profile/structure">
+    <textarea name="notes" placeholder="Работал в … с … по …, делал …"></textarea>
+    <p><button class="secondary">Структурировать</button></p>
+  </form>
+</div>
+{% endblock %}
